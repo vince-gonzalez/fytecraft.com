@@ -1,0 +1,21 @@
+{
+  "name": "fytecraft",
+  "version": "0.1.0",
+  "description": "FIST - Fighting In Super Teams — Physics-driven isometric RTS combat",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --workspace=packages/server",
+    "build": "npm run build --workspaces --if-present",
+    "clean": "npx rimraf node_modules packages/*/node_modules packages/*/dist"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}

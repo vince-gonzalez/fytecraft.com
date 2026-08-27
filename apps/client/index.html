@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FyteCraft — Fighting In Super Teams | Zengine™</title>
+  <meta name="description" content="FyteCraft — Physics-driven isometric RTS combat. Pick a discipline. Build your team. Harvest Bling. Own the center.">
+  <meta property="og:title" content="FyteCraft — Fighting In Super Teams">
+  <meta property="og:type" content="website">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#0a0a0f; color:#e8e8f0; font-family:'Courier New',monospace; overflow:hidden; width:100vw; height:100vh; }
+
+    /* ── LOBBY ── */
+    #lobby { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; z-index:200; background:#0a0a0f; }
+    #lobby-logo { width:380px; max-width:88vw; height:auto; }
+    #lobby-logo-fallback { font-size:56px; letter-spacing:8px; color:#00e5ff; text-transform:uppercase; display:none; }
+    .subtitle { font-size:11px; letter-spacing:4px; color:#8888aa; text-transform:uppercase; }
+    .byline   { font-size:9px;  letter-spacing:3px; color:#444466; text-transform:uppercase; }
+    .disc-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; max-width:680px; }
+    .disc-btn { padding:14px 10px; background:#11111a; border:1px solid #22223a; border-radius:6px; color:#e8e8f0; font-family:inherit; font-size:11px; letter-spacing:2px; text-transform:uppercase; cursor:pointer; transition:all 0.2s; text-align:center; }
+    .disc-btn:hover { border-color:#00e5ff; color:#00e5ff; }
+    .disc-btn .base { display:block; font-size:9px; color:#8888aa; margin-top:3px; }
+    #status { font-size:12px; letter-spacing:2px; color:#8888aa; min-height:20px; }
+
+    /* ── GAME CONTAINER ── */
+    #game-container { position:fixed; inset:0; z-index:1; display:none; }
+    #game-container canvas { position:fixed; top:0; left:0; }
+
+    /* ── HUD WRAPPER ── */
+    #hud { position:fixed; inset:0; pointer-events:none; display:none; z-index:50; }
+
+    /* ── TOP HUD ── */
+    #hud-top {
+      position:absolute; top:0; left:0; right:0; height:46px;
+      background:rgba(8,8,14,0.92); border-bottom:1px solid #22223a;
+      display:grid; grid-template-columns:auto 1fr auto;
+      align-items:center; padding:0 12px; gap:8px;
+    }
+    #hud-left { display:flex; gap:6px; align-items:center; pointer-events:all; }
+    .hud-btn { padding:4px 10px; background:#11111a; border:1px solid #2a2a44; border-radius:4px; color:#8888aa; font-family:inherit; font-size:9px; letter-spacing:2px; text-transform:uppercase; cursor:pointer; transition:all 0.15s; }
+    .hud-btn:hover { border-color:#00e5ff; color:#00e5ff; }
+    #hud-center { display:flex; flex-direction:column; align-items:center; gap:1px; }
+    #hud-clock  { font-size:22px; letter-spacing:3px; color:#e8e8f0; font-weight:bold; }
+    #hud-phase  { font-size:8px; letter-spacing:3px; color:#8888aa; text-transform:uppercase; }
+    #hud-right  { display:flex; gap:14px; align-items:center; }
+    .res-block  { display:flex; flex-direction:column; align-items:center; gap:1px; min-width:48px; }
+    .res-icon   { font-size:14px; line-height:1; }
+    .res-label  { font-size:7px; letter-spacing:2px; color:#8888aa; text-transform:uppercase; }
+    .res-value  { font-size:14px; letter-spacing:1px; color:#f5c842; font-weight:bold; }
+    .res-value.hype { color:#c084fc; }
+    .res-value.food { color:#86efac; }
+
+    /* ── BOTTOM HUD ── */
+    #hud-bottom {
+      position:absolute; bottom:0; left:0; right:0; height:90px;
+      background:rgba(8,8,14,0.92); border-top:1px solid #22223a;
+      display:grid; grid-template-columns:90px 1fr auto 120px;
+      align-items:center; padding:0 10px; gap:8px; pointer-events:all;
+    }
+    #unit-portrait { width:70px; height:70px; background:#11111a; border:1px solid #2a2a44; border-radius:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; overflow:hidden; }
+    #unit-portrait img { width:52px; height:64px; object-fit:contain; image-rendering:pixelated; }
+    #unit-portrait-name { position:absolute; bottom:0; left:0; right:0; font-size:7px; letter-spacing:1px; text-align:center; color:#8888aa; background:rgba(0,0,0,0.6); padding:2px 0; text-transform:uppercase; }
+    #unit-hp-bar  { position:absolute; top:0; left:0; right:0; height:3px; background:#22223a; }
+    #unit-hp-fill { height:100%; background:#00e5ff; transition:width 0.1s; }
+    #cmd-bar { display:flex; gap:5px; align-items:center; flex-wrap:wrap; }
+    .cmd-btn { padding:6px 10px; background:#11111a; border:1px solid #2a2a44; border-radius:4px; color:#8888aa; font-family:inherit; font-size:9px; letter-spacing:1px; text-transform:uppercase; cursor:pointer; transition:all 0.15s; min-width:52px; text-align:center; }
+    .cmd-btn:hover:not(:disabled) { border-color:#00e5ff; color:#00e5ff; background:#0a0a1a; }
+    .cmd-btn:disabled { opacity:0.35; cursor:not-allowed; }
+    .cmd-btn.active { border-color:#f5c842; color:#f5c842; }
+    .cmd-sep { width:1px; height:32px; background:#22223a; margin:0 2px; }
+    #ability-bar { display:flex; gap:5px; align-items:center; }
+    .ability-slot { width:52px; height:52px; background:#11111a; border:1px solid #2a2a44; border-radius:5px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; position:relative; transition:all 0.15s; }
+    .ability-slot:hover { border-color:#00e5ff; }
+    .ability-slot .ab-key { font-size:8px; letter-spacing:1px; color:#8888aa; text-transform:uppercase; }
+    .ability-slot .ab-cd  { position:absolute; inset:0; background:rgba(0,0,0,0.65); display:flex; align-items:center; justify-content:center; font-size:11px; color:#f5c842; border-radius:5px; display:none; }
+    #minimap { width:110px; height:70px; background:#0a0a14; border:1px solid #2a2a44; border-radius:4px; position:relative; overflow:hidden; }
+    #minimap canvas { position:absolute; inset:0; width:100%; height:100%; }
+    #minimap-label { position:absolute; bottom:2px; left:0; right:0; text-align:center; font-size:7px; color:#444466; letter-spacing:1px; text-transform:uppercase; }
+
+    /* ── ECONOMY PANEL ── */
+    #economy-panel { position:absolute; top:54px; left:10px; background:rgba(8,8,14,0.88); border:1px solid #1a1a2e; border-radius:5px; padding:8px 12px; min-width:140px; pointer-events:all; }
+    .econ-row   { display:flex; justify-content:space-between; align-items:center; gap:20px; margin-bottom:3px; }
+    .econ-label { font-size:8px; letter-spacing:2px; color:#8888aa; text-transform:uppercase; }
+    .econ-val   { font-size:12px; letter-spacing:1px; color:#f5c842; }
+    .econ-val.hp { color:#ef5350; }
+    #build-queue { margin-top:6px; border-top:1px solid #1a1a2e; padding-top:5px; }
+    .build-item     { font-size:8px; color:#8888aa; letter-spacing:1px; margin-bottom:4px; display:flex; flex-direction:column; gap:2px; }
+    .build-item-row { display:flex; justify-content:space-between; }
+    .build-pct      { color:#00e5ff; }
+    .build-bar-track { width:100%; height:3px; background:#1a1a2e; border-radius:2px; overflow:hidden; }
+    .build-bar-fill  { height:100%; background:#00e5ff; border-radius:2px; transition:width 0.1s; }
+    /* Training queue — gold accent to distinguish from construction queue */
+    #training-queue-display { margin-top:4px; display:none; }
+
+    /* ── BASE COMMAND PANEL ── */
+    #base-cmd-panel {
+      display:none; position:fixed; bottom:98px; left:50%; transform:translateX(-50%);
+      background:rgba(8,8,14,0.96); border:1px solid #2a2a44; border-radius:8px;
+      padding:12px 16px; gap:10px; align-items:center; z-index:60;
+      pointer-events:all; flex-wrap:wrap; max-width:90vw;
+    }
+    #base-panel-level { font-size:10px; letter-spacing:2px; color:#8888aa; text-transform:uppercase; margin-right:4px; white-space:nowrap; }
+
+    /* ── TRAINEE BUILD PANEL ── */
+    #trainee-build-panel {
+      display:none; position:fixed; bottom:178px; left:50%; transform:translateX(-50%);
+      background:rgba(8,8,14,0.96); border:1px solid #1e3a2e; border-radius:8px;
+      padding:10px 14px; gap:10px; align-items:center; z-index:61;
+      pointer-events:all; flex-wrap:wrap; max-width:90vw;
+    }
+    #trainee-panel-label { font-size:9px; letter-spacing:2px; color:#86efac; text-transform:uppercase; white-space:nowrap; margin-right:4px; }
+    .build-cmd-btn { padding:6px 10px; background:#0a140e; border:1px solid #1e3a2e; border-radius:4px; color:#86efac; font-family:'Courier New',monospace; font-size:9px; letter-spacing:1px; text-transform:uppercase; cursor:pointer; transition:all 0.15s; min-width:64px; text-align:center; line-height:1.4; }
+    .build-cmd-btn:hover:not(:disabled) { border-color:#86efac; color:#fff; background:#0d1f14; }
+    .build-cmd-btn:disabled { opacity:0.35; cursor:not-allowed; }
+
+    /* ── TRAINER PANEL — v0.1.11 ── */
+    /* Shown via "Train Fighters" button in base panel once Trainer is built.
+       Sits above trainee build panel level. Uses gold/amber for fighter training. */
+    #trainer-panel {
+      display:none; position:fixed; bottom:258px; left:50%; transform:translateX(-50%);
+      background:rgba(8,8,14,0.96); border:1px solid #3a2e0a; border-radius:8px;
+      padding:10px 14px; gap:10px; align-items:flex-start; z-index:62;
+      pointer-events:all; flex-direction:column; max-width:320px; min-width:240px;
+    }
+    #trainer-panel-header { display:flex; align-items:center; justify-content:space-between; width:100%; gap:10px; }
+    #trainer-panel-label  { font-size:9px; letter-spacing:2px; color:#f5c842; text-transform:uppercase; white-space:nowrap; }
+    .train-btn {
+      padding:7px 10px; background:#140e00; border:1px solid #3a2e0a;
+      border-radius:4px; color:#f5c842; font-family:'Courier New',monospace;
+      font-size:9px; letter-spacing:1px; text-transform:uppercase; cursor:pointer;
+      transition:all 0.15s; width:100%; text-align:left; line-height:1.4;
+    }
+    .train-btn:hover:not(:disabled) { border-color:#f5c842; color:#fff; background:#1a1400; }
+    .train-btn:disabled { opacity:0.35; cursor:not-allowed; }
+    #trainer-queue-display { width:100%; margin-top:2px; }
+
+    /* ── COMMENTARY ── */
+    #commentary { position:fixed; bottom:98px; left:16px; max-width:460px; pointer-events:none; z-index:50; display:none; }
+    .cline { background:rgba(8,8,14,0.92); border-left:3px solid #00e5ff; padding:7px 12px; margin-bottom:5px; font-size:12px; animation:slideIn 0.3s ease; border-radius:0 4px 4px 0; }
+    .cline.viral { border-left-color:#f5c842; }
+    .vtag { font-size:8px; letter-spacing:2px; text-transform:uppercase; color:#8888aa; display:block; margin-bottom:2px; }
+    @keyframes slideIn { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+
+    /* ── DAMAGE NUMBERS ── */
+    .dmg { position:fixed; font-size:20px; font-weight:bold; pointer-events:none; z-index:100; animation:floatUp 1.2s ease forwards; }
+    @keyframes floatUp { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-48px)} }
+  </style>
+</head>
+<body>
+
+<!-- LOBBY -->
+<div id="lobby">
+  <img id="lobby-logo" src="/assets/logo.png" alt="FyteCraft"
+       onerror="this.style.display='none';document.getElementById('lobby-logo-fallback').style.display='block';">
+  <span id="lobby-logo-fallback">FyteCraft</span>
+  <p class="subtitle">Fighting In Super Teams</p>
+  <p class="byline">Zengine™ &mdash; Knuckland &mdash; The Brawl For It All</p>
+  <div class="disc-grid">
+    <button class="disc-btn" onclick="window.joinGame('Striker')">Striker<span class="base">Local Gym</span></button>
+    <button class="disc-btn" onclick="window.joinGame('Grappler')">Grappler<span class="base">The Mats</span></button>
+    <button class="disc-btn" onclick="window.joinGame('Technician')">Technician<span class="base">Academy</span></button>
+    <button class="disc-btn" onclick="window.joinGame('Brawler')">Brawler<span class="base">The Yard</span></button>
+    <button class="disc-btn" onclick="window.joinGame('Specialist')">Specialist<span class="base">The Lab</span></button>
+  </div>
+  <div id="status">Select your discipline</div>
+</div>
+
+<!-- GAME -->
+<div id="game-container"></div>
+
+<!-- HUD -->
+<div id="hud">
+
+  <!-- TOP BAR -->
+  <div id="hud-top">
+    <div id="hud-left">
+      <button class="hud-btn" id="btn-menu" onclick="window.openMenu()">Menu</button>
+      <button class="hud-btn" id="btn-log"  onclick="window.openLog()">Log</button>
+    </div>
+    <div id="hud-center">
+      <span id="hud-clock">10:00</span>
+      <span id="hud-phase">WAR</span>
+    </div>
+    <div id="hud-right">
+      <div class="res-block">
+        <span class="res-icon">¤</span>
+        <span class="res-label">Bling</span>
+        <span class="res-value" id="hud-bling">0</span>
+      </div>
+      <div class="res-block">
+        <span class="res-icon">⚡</span>
+        <span class="res-label">Hype</span>
+        <span class="res-value hype" id="hud-hype">0</span>
+      </div>
+      <div class="res-block">
+        <span class="res-icon">🍗</span>
+        <span class="res-label">Food</span>
+        <span class="res-value food" id="hud-food">0/0</span>
+      </div>
+      <div class="res-block">
+        <span class="res-label">Center</span>
+        <span class="res-value" id="hud-center-time" style="color:#00e5ff">0.0s</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ECONOMY PANEL -->
+  <div id="economy-panel">
+    <div class="econ-row"><span class="econ-label">Treasury</span><span class="econ-val" id="econ-treasury">50</span></div>
+    <div class="econ-row"><span class="econ-label">Base HP</span><span class="econ-val hp" id="econ-base-hp">500</span></div>
+    <div id="build-queue"><div class="build-item" style="color:#333355">No construction</div></div>
+    <!-- Training queue — gold bars, hidden when empty -->
+    <div id="training-queue-display"></div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div id="hud-bottom">
+    <div id="unit-portrait">
+      <div id="unit-hp-bar"><div id="unit-hp-fill" style="width:100%"></div></div>
+      <img id="unit-sprite" src="" alt="" style="display:none;">
+      <span id="unit-portrait-name">&mdash;</span>
+    </div>
+    <div id="cmd-bar">
+      <button class="cmd-btn" id="cmd-move"   onclick="window.issueCmd('MOVE')">Move</button>
+      <button class="cmd-btn" id="cmd-stop"   onclick="window.issueCmd('STOP')">Stop</button>
+      <button class="cmd-btn" id="cmd-attack" onclick="window.issueCmd('ATTACK')">Attack</button>
+      <div class="cmd-sep"></div>
+      <button class="cmd-btn" id="cmd-patrol" onclick="window.issueCmd('PATROL')">Patrol</button>
+      <button class="cmd-btn" id="cmd-hold"   onclick="window.issueCmd('HOLD')">Hold</button>
+      <button class="cmd-btn" id="cmd-guard"  onclick="window.issueCmd('GUARD')">Guard</button>
+      <div class="cmd-sep"></div>
+      <div id="ability-bar">
+        <div class="ability-slot" onclick="window.useAbility(1)"><span class="ab-key">T1</span><div class="ab-cd" id="ab-cd-1"></div></div>
+        <div class="ability-slot" onclick="window.useAbility(2)"><span class="ab-key">T3</span><div class="ab-cd" id="ab-cd-2"></div></div>
+        <div class="ability-slot" onclick="window.useAbility(3)"><span class="ab-key">T5</span><div class="ab-cd" id="ab-cd-3"></div></div>
+      </div>
+    </div>
+    <div id="hud-portraits" style="display:flex;gap:4px;align-items:center;"></div>
+    <div id="minimap">
+      <canvas id="minimap-canvas"></canvas>
+      <span id="minimap-label">Knuckland</span>
+    </div>
+  </div>
+</div>
+
+<!-- BASE COMMAND PANEL -->
+<div id="base-cmd-panel">
+  <span id="base-panel-level">T1 Base</span>
+  <button class="cmd-btn" id="btn-recruit-trainee" onclick="window.cmdRecruitTrainee()"
+    style="border-color:#f5c842;color:#f5c842;">Recruit Trainee<br><span style="font-size:8px;color:#8888aa;">70¤ · Food</span></button>
+  <button class="cmd-btn" id="btn-upgrade-base" onclick="window.cmdUpgradeBase()"
+    style="border-color:#c084fc;color:#c084fc;">Upgrade Base<br><span style="font-size:8px;color:#8888aa;">400¤</span></button>
+  <button class="cmd-btn" id="btn-build-cookout" onclick="window.cmdBuildCookout()"
+    style="border-color:#86efac;color:#86efac;">Cookout<br><span style="font-size:8px;color:#8888aa;">200¤ · T2</span></button>
+  <!-- Train Fighters — hidden until Trainer is built, shown by updateBasePanel() -->
+  <button class="cmd-btn" id="btn-open-trainer" onclick="window.cmdOpenTrainerPanel()"
+    style="display:none;border-color:#f5c842;color:#f5c842;">
+    Train Fighters<br><span style="font-size:8px;color:#8888aa;">Trainer</span>
+  </button>
+  <button class="cmd-btn" onclick="document.getElementById('base-cmd-panel').style.display='none';window.cmdCloseTrainerPanel();"
+    style="color:#555577;min-width:28px;">✕</button>
+</div>
+
+<!-- TRAINEE BUILD PANEL -->
+<div id="trainee-build-panel">
+  <span id="trainee-panel-label">🔨 Build</span>
+  <button class="build-cmd-btn" id="tbtn-tech-refinery" onclick="window.cmdBuildTechRefinery()">
+    <span id="tbtn-tech-refinery-lbl">Tech Refinery (450¤)</span><br>
+    <span style="font-size:8px;color:#555577;">T2 · 30s · unlocks upgrades</span>
+  </button>
+  <button class="build-cmd-btn" id="tbtn-trainer" onclick="window.cmdBuildTrainer()">
+    <span id="tbtn-trainer-lbl">Trainer (free, 25s)</span><br>
+    <span style="font-size:8px;color:#555577;">trains T1/T2 fighters</span>
+  </button>
+  <button class="build-cmd-btn" onclick="window.cmdCloseTraineeBuildPanel()"
+    style="color:#555577;min-width:28px;border-color:#1a1a2e;">✕</button>
+</div>
+
+<!-- TRAINER PANEL — v0.1.11
+     Opens from "Train Fighters" button in base panel.
+     Shows T1 + T2 training with costs, timers, and live progress queue. -->
+<div id="trainer-panel">
+  <div id="trainer-panel-header">
+    <span id="trainer-panel-label">🥊 Trainer</span>
+    <button class="cmd-btn" onclick="window.cmdCloseTrainerPanel()"
+      style="color:#555577;min-width:28px;padding:3px 8px;">✕</button>
+  </div>
+  <button class="train-btn" id="train-t1-btn" onclick="window.cmdTrainT1Fighter()">
+    <span id="train-t1-lbl">Train T1 Fighter (200¤, 12s)</span>
+  </button>
+  <button class="train-btn" id="train-t2-btn" onclick="window.cmdTrainT2Fighter()">
+    <span id="train-t2-lbl">Train T2 Fighter (350¤ + 50⚡, 20s)</span>
+  </button>
+  <div id="trainer-queue-display">
+    <span style="font-size:8px;color:#333355;letter-spacing:1px;">Queue empty</span>
+  </div>
+</div>
+
+<div id="commentary"></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
