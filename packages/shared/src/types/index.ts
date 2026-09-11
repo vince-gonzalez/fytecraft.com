@@ -6,7 +6,18 @@
 //            disciplineTierSprite() helper
 // v0.1.11 — FighterTrainingJob, fighter_trained/fighter_ready event types,
 //            nodeOwner on MapNode for node exclusivity
-/* ===== LAST STABLE: v0.1.10 — trainee build panel, Tech Refinery, Trainer ===== */
+// v0.1.13 — SHARED TYPES CATCH-UP. The v0.1.13 server (state.ts/loop.ts) shipped
+//            Media Studio, Recovery Center, Championship Office, T3 base upgrade and
+//            nine new event types WITHOUT declaring any of them here. The server only
+//            ran because it is launched with --transpile-only; `tsc --noEmit` reported
+//            11 errors. This pass declares them:
+//              - BuildingType: + media_studio, recovery_center, championship_office,
+//                              base_t3_upgrade
+//              - GameEventType: + 9 v0.1.13 events
+//              - Player / PlayerSnapshot: + mediaStudioActive
+//            The `as any` / `as BuildingType` casts in state.ts are removed in the same
+//            pass — the author's own note read "cast until shared types updated".
+/* ===== LAST STABLE: v0.1.13 — server typechecks clean, all v0.1.13 structures declared ===== */
 
 // ============================================================
 // ENUMS
@@ -79,12 +90,23 @@ export interface Vec2 {
 // BUILDING
 // ============================================================
 
+// DECISION: 'cookout' keeps its enum value even though state.ts now calls the
+//   structure a Nutrition Center in comments. 'The Cookout' is a LOCKED brand string
+//   and the client resolves cookout.png off this literal. Renaming the enum would break
+//   both. Display name lives in ConstructionJob.type, not here.
+// DECISION: 'base_t3_upgrade' is a BuildingType because it rides the constructionQueue,
+//   which is keyed by buildingType. It never lands in player.buildings — completeJob()
+//   raises baseLevel instead.
 export type BuildingType =
   | 'cookout'
   | 'tech_refinery'
   | 'trainer'
   | 'coach'
-  | 'phone_booth';
+  | 'media_studio'
+  | 'recovery_center'
+  | 'championship_office'
+  | 'phone_booth'
+  | 'base_t3_upgrade';
 
 export interface Building {
   type:    BuildingType;
@@ -171,8 +193,32 @@ export interface UnitMemory {
 // COMMANDS
 // ============================================================
 
+// DECISION: metaType carries the RTS-layer command (BUILD_*, TRAIN_*, UPGRADE_*,
+//   RECRUIT_TRAINEE, TOGGLE_MEDIA_STUDIO). The client has emitted it since v0.1.10 and
+//   loop.ts has routed on it since v0.1.10, but it was never declared — loop.ts read it
+//   through `(command as any).metaType`. Declared here so the routes are typed.
+export type MetaCommand =
+  | 'RECRUIT_TRAINEE'
+  | 'UPGRADE_BASE'
+  | 'UPGRADE_BASE_T3'
+  | 'BUILD_COOKOUT'
+  | 'BUILD_TECH_REFINERY'
+  | 'BUILD_TRAINER'
+  | 'BUILD_COACH'
+  | 'BUILD_MEDIA_STUDIO'
+  | 'TOGGLE_MEDIA_STUDIO'
+  | 'BUILD_RECOVERY_CENTER'
+  | 'BUILD_CHAMPIONSHIP_OFFICE'
+  | 'BUILD_PHONE_BOOTH'
+  | 'TRAIN_T1_FIGHTER'
+  | 'TRAIN_T2_FIGHTER'
+  | 'TRAIN_T3_FIGHTER'
+  | 'TRAIN_T4_FIGHTER'
+  | 'TRAIN_T5_FIGHTER';
+
 export interface Command {
   type: ActionType;
+  metaType?: MetaCommand;   // v0.1.13 — RTS-layer command, routed in loop.enqueueCommand()
   unitId: string;
   targetId?: string;
   targetPos?: Vec2;
@@ -249,6 +295,7 @@ export interface Player {
   baseLevel:         number;
   buildings:         Building[];
   trainingQueue:     FighterTrainingJob[]; // v0.1.11
+  mediaStudioActive: boolean;              // v0.1.13 — Bling→Hype conversion toggle
 }
 
 // ============================================================
@@ -305,6 +352,15 @@ export type GameEventType =
   | 'construction_complete'
   | 'fighter_trained'      // v0.1.11 — training job entered queue
   | 'fighter_ready'        // v0.1.11 — fighter spawned from training
+  | 'base_upgrade_queued'        // v0.1.13 — T2→T3 entered the construction queue
+  | 'coach_built'                // v0.1.13
+  | 'media_studio_built'         // v0.1.13
+  | 'media_studio_toggled'       // v0.1.13 — player flipped Bling→Hype conversion
+  | 'media_studio_auto_off'      // v0.1.13 — conversion shut itself off, Bling exhausted
+  | 'recovery_center_built'      // v0.1.13
+  | 'championship_office_built'  // v0.1.13
+  | 'phone_booth_built'          // v0.1.13
+  | 'hype_spike'                 // v0.1.13 — +15 hype on a KO
   | 'cage_control_achieved'
   | 'phase_transition'
   | 'match_end';
@@ -354,6 +410,7 @@ export interface PlayerSnapshot {
   baseLevel:         number;
   buildings:         Building[];
   trainingQueue:     FighterTrainingJob[]; // v0.1.11
+  mediaStudioActive: boolean;              // v0.1.13 — drives the toggle's lit state
 }
 
 export interface Snapshot {

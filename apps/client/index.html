@@ -1,8 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!--
+  ================================================================
+  FyteCraft client shell — v0.1.14a
+  LAST STABLE: v0.1.11 — trainer panel, T1/T2 training, trainee build panel
+
+  CHANGE LOG — v0.1.14a (repairs from the six-verifier review of v0.1.14)
+  ADDED  #btn-open-advanced in the ECONOMY panel -> window.cmdOpenAdvancedBuildPanelStandalone().
+         A trainee-independent opener for #advanced-build-panel. Before this, the only
+         opener was #tbtn-advanced inside #trainee-build-panel, and that panel opens
+         from exactly one place: clicking one of your OWN LIVE trainees on the canvas
+         (game.ts:361-367). The server requires no trainee for any of the five routes
+         behind it — buildCoach / buildMediaStudio / buildRecoveryCenter /
+         buildChampionshipOffice / buildPhoneBooth read baseLevel, bling, hype,
+         buildings and constructionQueue and nothing else. A player whose scouts were
+         KO'd, or whose roster was full of fighters, could not reach BUILD_COACH,
+         BUILD_MEDIA_STUDIO, BUILD_RECOVERY_CENTER, BUILD_CHAMPIONSHIP_OFFICE or
+         BUILD_PHONE_BOOTH at all. It lives in the economy panel for the same reason
+         the Media Studio toggle does: #base-cmd-panel is left:50% + translateX(-50%),
+         capped at 50vw, and another button there wraps it into the row above.
+  CHANGED PANEL STACK RE-SPACED. #trainee-build-panel bottom 178px -> 212px and the
+         shared trainer/advanced slot 258px -> 334px. Both stacked panels are
+         position:fixed, left:50%, translateX(-50%) with flex-wrap:wrap, so each is
+         capped at 50vw and WRAPS TO TWO ROWS on a viewport narrower than roughly
+         1224px — which is most 1080p windows that are not maximised. At the old
+         offsets a wrapped row grew upward into the panel above it and the higher
+         z-index panel swallowed clicks on the top ~18px of the one below. The new
+         offsets clear a two-row base panel (98 + 106 = 204 < 212) and a two-row trainee
+         panel (212 + 110 = 322 < 334). MEASURED after the change, panels forced
+         visible, trainer queue padded to five rows — no overlap at any of
+         1024x768, 1152x720, 1180x768, 1220x768, 1280x768, 1366x768 or 1920x1080,
+         and the trainer panel's top stays below the 46px top HUD bar throughout.
+  CHANGED the base panel's X now also calls window.cmdCloseAdvancedBuildPanel(). It
+         already swept the 258px slot via cmdCloseTrainerPanel(); #advanced-build-panel
+         shares that slot, so the invariant "the X clears the shared slot" was false.
+  ADDED  CSS for .portrait / .portrait-career / .portrait-name / .portrait-hp-bar /
+         .portrait-hp-fill — the five classes ui.ts:updatePortraits emits and that had
+         no rule anywhere in this file. Also .commentary-line / .voice-tag /
+         .dmg-number, which ui.ts also emits; the file defined .cline / .vtag / .dmg
+         instead, so commentary and damage numbers were rendering unstyled.
+         (ui.ts also had the wrong target element — see its own CHANGE LOG.)
+  NOTE   No existing rule was restyled beyond the two `bottom` offsets above.
+
+  CHANGE LOG — v0.1.14 (reach the whole v0.1.13 feature set)
+  ADDED  #advanced-build-panel  (bottom:258px, z-index:63, flex-column)
+         Shares the trainer panel's slot; opening either closes the other.
+         Five previously unreachable construction routes:
+           #abtn-coach                 -> BUILD_COACH               (Coaching Institute)
+           #abtn-media-studio          -> BUILD_MEDIA_STUDIO        (Media Studio)
+           #abtn-recovery-center       -> BUILD_RECOVERY_CENTER     (Recovery Center)
+           #abtn-championship-office   -> BUILD_CHAMPIONSHIP_OFFICE (Championship Office)
+           #abtn-phone-booth           -> BUILD_PHONE_BOOTH         (Fight Booking Office)
+  ADDED  #tbtn-advanced — opener for the panel above, lives in the trainee build panel.
+  ADDED  #btn-toggle-media-studio in the ECONOMY panel -> TOGGLE_MEDIA_STUDIO.
+         Hidden until a Media Studio is BUILT; lit/unlit is driven by
+         snapshot.players[me].mediaStudioActive, never by local state.
+         It sits beside the Bling/Hype readouts it trades between, and NOT in the base
+         panel: #base-cmd-panel is left:50% + translateX(-50%), so its shrink-to-fit
+         width is capped at half the viewport (683px at 1366x768) and a fifth button
+         there wrapped the panel upward into #trainee-build-panel.
+  ADDED  #train-t3-btn / #train-t4-btn / #train-t5-btn in the trainer panel ->
+         TRAIN_T3_FIGHTER / TRAIN_T4_FIGHTER / TRAIN_T5_FIGHTER.
+  CHANGED #btn-upgrade-base now spans T1->T2 AND T2->T3. It carries the ids
+         #btn-upgrade-base-lbl / #btn-upgrade-base-cost so main.ts can relabel it,
+         and dispatches through window.cmdUpgradeBaseAuto() which picks
+         UPGRADE_BASE at baseLevel 1 and UPGRADE_BASE_T3 at baseLevel 2.
+  ADDED  CSS: #advanced-build-panel, #advanced-panel-header, #advanced-panel-label,
+         and the additive modifier .build-cmd-btn.wide (width:100%; text-align:left)
+         so the existing green build button works inside a column panel.
+  NOTE   No existing rule was restyled. Dark mode untouched.
+  ================================================================
+  -->
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- v0.1.16 - maximum-scale + user-scalable=no stop double-tap and browser pinch
+       competing with the in-game pinch handler in input.ts. viewport-fit=cover lets
+       the canvas run under a notch; the safe-area insets below keep the HUD out of it. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0a0f">
   <title>FyteCraft — Fighting In Super Teams | Zengine™</title>
   <meta name="description" content="FyteCraft — Physics-driven isometric RTS combat. Pick a discipline. Build your team. Harvest Bling. Own the center.">
   <meta property="og:title" content="FyteCraft — Fighting In Super Teams">
@@ -16,7 +93,7 @@
     #lobby-logo { width:380px; max-width:88vw; height:auto; }
     #lobby-logo-fallback { font-size:56px; letter-spacing:8px; color:#00e5ff; text-transform:uppercase; display:none; }
     .subtitle { font-size:11px; letter-spacing:4px; color:#8888aa; text-transform:uppercase; }
-    .byline   { font-size:9px;  letter-spacing:3px; color:#444466; text-transform:uppercase; }
+    .byline   { font-size:9px;  letter-spacing:3px; color:#9595bd; text-transform:uppercase; }
     .disc-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; max-width:680px; }
     .disc-btn { padding:14px 10px; background:#11111a; border:1px solid #22223a; border-radius:6px; color:#e8e8f0; font-family:inherit; font-size:11px; letter-spacing:2px; text-transform:uppercase; cursor:pointer; transition:all 0.2s; text-align:center; }
     .disc-btn:hover { border-color:#00e5ff; color:#00e5ff; }
@@ -74,9 +151,24 @@
     .ability-slot:hover { border-color:#00e5ff; }
     .ability-slot .ab-key { font-size:8px; letter-spacing:1px; color:#8888aa; text-transform:uppercase; }
     .ability-slot .ab-cd  { position:absolute; inset:0; background:rgba(0,0,0,0.65); display:flex; align-items:center; justify-content:center; font-size:11px; color:#f5c842; border-radius:5px; display:none; }
+    /* v0.1.16 - moved off the element. As an inline style it outranked the
+       mobile media query and the strip overflowed off the bottom of a phone. */
+    #hud-portraits { display:flex; gap:4px; align-items:center; }
     #minimap { width:110px; height:70px; background:#0a0a14; border:1px solid #2a2a44; border-radius:4px; position:relative; overflow:hidden; }
     #minimap canvas { position:absolute; inset:0; width:100%; height:100%; }
-    #minimap-label { position:absolute; bottom:2px; left:0; right:0; text-align:center; font-size:7px; color:#444466; letter-spacing:1px; text-transform:uppercase; }
+    #minimap-label { position:absolute; bottom:2px; left:0; right:0; text-align:center; font-size:7px; color:#9595bd; letter-spacing:1px; text-transform:uppercase; }
+
+    /* ── UNIT PORTRAIT STRIP — v0.1.14a ──
+       ui.ts:updatePortraits builds these five classes and none of them had a rule in
+       this file, so the strip rendered as unstyled inline text. #hud-portraits is the
+       grid's third column (auto), so the strip sizes to its contents. */
+    .portrait { width:44px; height:52px; background:#11111a; border:1px solid #2a2a44; border-radius:4px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; position:relative; cursor:pointer; transition:all 0.15s; padding-bottom:5px; }
+    .portrait:hover { border-color:#00e5ff; }
+    .portrait.selected { border-color:#00e5ff; box-shadow:0 0 8px rgba(0,229,255,0.45); }
+    .portrait-career { font-size:16px; font-weight:bold; line-height:1; }
+    .portrait-name { font-size:7px; letter-spacing:1px; color:#8888aa; text-transform:uppercase; }
+    .portrait-hp-bar { position:absolute; bottom:0; left:0; right:0; height:3px; background:#22223a; border-radius:0 0 3px 3px; overflow:hidden; }
+    .portrait-hp-fill { height:100%; background:#00e5ff; transition:width 0.15s; }
 
     /* ── ECONOMY PANEL ── */
     #economy-panel { position:absolute; top:54px; left:10px; background:rgba(8,8,14,0.88); border:1px solid #1a1a2e; border-radius:5px; padding:8px 12px; min-width:140px; pointer-events:all; }
@@ -103,8 +195,11 @@
     #base-panel-level { font-size:10px; letter-spacing:2px; color:#8888aa; text-transform:uppercase; margin-right:4px; white-space:nowrap; }
 
     /* ── TRAINEE BUILD PANEL ── */
+    /* v0.1.14a — bottom 178px -> 212px. This panel is capped at 50vw and wraps to two
+       rows below ~1224px; at 178px a wrapped row grew up into the trainer/advanced slot
+       and that higher-z-index panel ate clicks on its top edge. See the header log. */
     #trainee-build-panel {
-      display:none; position:fixed; bottom:178px; left:50%; transform:translateX(-50%);
+      display:none; position:fixed; bottom:212px; left:50%; transform:translateX(-50%);
       background:rgba(8,8,14,0.96); border:1px solid #1e3a2e; border-radius:8px;
       padding:10px 14px; gap:10px; align-items:center; z-index:61;
       pointer-events:all; flex-wrap:wrap; max-width:90vw;
@@ -113,12 +208,41 @@
     .build-cmd-btn { padding:6px 10px; background:#0a140e; border:1px solid #1e3a2e; border-radius:4px; color:#86efac; font-family:'Courier New',monospace; font-size:9px; letter-spacing:1px; text-transform:uppercase; cursor:pointer; transition:all 0.15s; min-width:64px; text-align:center; line-height:1.4; }
     .build-cmd-btn:hover:not(:disabled) { border-color:#86efac; color:#fff; background:#0d1f14; }
     .build-cmd-btn:disabled { opacity:0.35; cursor:not-allowed; }
+    /* v0.1.14 — additive modifier so the green build button works in a flex-COLUMN
+       panel. Does not alter .build-cmd-btn itself; the row panel is unaffected. */
+    .build-cmd-btn.wide { width:100%; text-align:left; min-width:0; }
+
+    /* ── ADVANCED BUILD PANEL — v0.1.14 ── */
+    /* Opened from the trainee build panel's "Advanced" button. Column layout, so its
+       five entries never wrap sideways into a neighbouring panel.
+
+       MEASURED: it SHARES the trainer panel's slot (bottom:334px as of v0.1.14a,
+       258px before) and the two are
+       mutually exclusive — opening either closes the other (main.ts). Stacking it above
+       instead does not survive: adding T3/T4/T5 grew the trainer panel from 150px to
+       266px empty and ~351px at a five-row training queue, and the training queue has no
+       server-side cap, so any fixed offset above it eventually overlaps. At 1366x768 a
+       fifth stacked level would also run off the top of the screen entirely. */
+    /* v0.1.14a — bottom 258px -> 334px, clearing a two-row #trainee-build-panel
+       (212 + 110 = 322). Kept byte-identical to #trainer-panel's offset: the two share
+       this slot and are mutually exclusive. */
+    #advanced-build-panel {
+      display:none; position:fixed; bottom:334px; left:50%; transform:translateX(-50%);
+      background:rgba(8,8,14,0.96); border:1px solid #1e3a2e; border-radius:8px;
+      padding:10px 14px; gap:8px; align-items:flex-start; z-index:63;
+      pointer-events:all; flex-direction:column; max-width:340px; min-width:300px;
+    }
+    #advanced-panel-header { display:flex; align-items:center; justify-content:space-between; width:100%; gap:10px; }
+    #advanced-panel-label  { font-size:9px; letter-spacing:2px; color:#86efac; text-transform:uppercase; white-space:nowrap; }
 
     /* ── TRAINER PANEL — v0.1.11 ── */
     /* Shown via "Train Fighters" button in base panel once Trainer is built.
        Sits above trainee build panel level. Uses gold/amber for fighter training. */
+    /* v0.1.14a — bottom 258px -> 334px, matching #advanced-build-panel. Worst case is
+       a five-row training queue, measures 333px tall: at 720px viewport height its top
+       lands at 53px, clear of the 46px top HUD bar. */
     #trainer-panel {
-      display:none; position:fixed; bottom:258px; left:50%; transform:translateX(-50%);
+      display:none; position:fixed; bottom:334px; left:50%; transform:translateX(-50%);
       background:rgba(8,8,14,0.96); border:1px solid #3a2e0a; border-radius:8px;
       padding:10px 14px; gap:10px; align-items:flex-start; z-index:62;
       pointer-events:all; flex-direction:column; max-width:320px; min-width:240px;
@@ -140,11 +264,172 @@
     .cline { background:rgba(8,8,14,0.92); border-left:3px solid #00e5ff; padding:7px 12px; margin-bottom:5px; font-size:12px; animation:slideIn 0.3s ease; border-radius:0 4px 4px 0; }
     .cline.viral { border-left-color:#f5c842; }
     .vtag { font-size:8px; letter-spacing:2px; text-transform:uppercase; color:#8888aa; display:block; margin-bottom:2px; }
+    /* v0.1.14a — ui.ts emits .commentary-line / .voice-tag, not .cline / .vtag. Same
+       look, matched to the class names the code actually writes. */
+    .commentary-line { background:rgba(8,8,14,0.92); border-left:3px solid #00e5ff; padding:7px 12px; margin-bottom:5px; font-size:12px; animation:slideIn 0.3s ease; border-radius:0 4px 4px 0; }
+    .commentary-line.viral { border-left-color:#f5c842; }
+    .voice-tag { font-size:8px; letter-spacing:2px; text-transform:uppercase; color:#8888aa; display:block; margin-bottom:2px; }
     @keyframes slideIn { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
 
     /* ── DAMAGE NUMBERS ── */
     .dmg { position:fixed; font-size:20px; font-weight:bold; pointer-events:none; z-index:100; animation:floatUp 1.2s ease forwards; }
+    /* v0.1.14a — ui.ts:spawnDamageNumber writes .dmg-number, not .dmg. */
+    .dmg-number { position:fixed; font-size:20px; font-weight:bold; pointer-events:none; z-index:100; animation:floatUp 1.2s ease forwards; font-family:'Courier New',monospace; text-shadow:0 0 6px rgba(0,0,0,0.9); }
     @keyframes floatUp { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-48px)} }
+
+    /* ============================================================
+       MOBILE - v0.1.16
+       ------------------------------------------------------------
+       The client had ZERO media queries before this block. Nothing
+       below restyles a desktop rule: every rule is inside a media
+       query or adds a text-shadow, so the >768px layout is
+       byte-for-byte unchanged.
+
+       DECISION: the stacked-panel geometry (base 98px, trainee
+         212px, trainer/advanced 334px) cannot survive a phone. It
+         needs 1024px of width and ~600px of height and had only 8px
+         of clearance at 1024x768. Below 768px every command panel
+         becomes a BOTTOM SHEET at bottom:0. They keep their existing
+         z-index order (60/61/62/63), so opening a deeper panel
+         covers the shallower one - the standard sheet stack.
+
+       DECISION: 44px minimum on every interactive control. That is
+         the Apple HIG floor; the tightest button here was padding
+         3px 8px - roughly 22px tall, a coin flip to hit.
+
+       DECISION: text-shadow outlines on DOM text rather than a
+         heavier font. The canvas got real strokeText outlines in
+         v0.1.15; DOM text cannot stroke, so a 4-way 1px shadow is
+         the equivalent. Applied at ALL widths, not just mobile,
+         because the HUD sits over live canvas art on desktop too.
+       ============================================================ */
+
+    #hud-clock, #hud-phase, .res-value, .res-label, .res-icon,
+    #base-panel-level, #trainee-panel-label, #trainer-panel-label,
+    #advanced-panel-label, #minimap-label, .econ-label, .econ-val {
+      text-shadow: 0 1px 0 rgba(4,4,8,0.9), 0 -1px 0 rgba(4,4,8,0.9),
+                   1px 0 0 rgba(4,4,8,0.9), -1px 0 0 rgba(4,4,8,0.9);
+    }
+    .cmd-btn, .build-cmd-btn, .train-btn, .hud-btn, .disc-btn {
+      text-shadow: 0 1px 0 rgba(4,4,8,0.85);
+    }
+
+    @media (max-width: 768px) {
+      body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+
+      #hud-top {
+        height: auto; min-height: 52px;
+        padding: calc(4px + env(safe-area-inset-top)) 8px 4px;
+      }
+      #hud-clock { font-size: 18px; }
+      #hud-phase { font-size: 9px; }
+      #hud-right { gap: 8px; }
+      .res-block { min-width: 40px; }
+      .res-value { font-size: 13px; }
+      .res-label { font-size: 8px; }
+      .hud-btn   { min-height: 44px; min-width: 44px; font-size: 10px; padding: 4px 8px; }
+
+      #economy-panel {
+        top: calc(60px + env(safe-area-inset-top)); left: 6px;
+        padding: 6px 8px; min-width: 0; max-width: 46vw;
+      }
+      .econ-label { font-size: 9px; }
+      .econ-val   { font-size: 12px; }
+
+      #hud-bottom {
+        height: auto; min-height: 76px;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+        grid-template-columns: 62px 1fr 84px;
+        gap: 6px;
+      }
+      #unit-portrait     { width: 58px; height: 58px; }
+      #unit-portrait img { width: 44px; height: 52px; }
+      #hud-portraits     { display: none; }
+      #minimap           { width: 84px; height: 54px; }
+      #cmd-bar           { gap: 4px; }
+      .cmd-btn           { min-height: 44px; min-width: 44px; font-size: 10px; padding: 6px 8px; }
+      .cmd-sep           { display: none; }
+      .ability-slot      { width: 46px; height: 46px; }
+
+      /* COMMAND PANELS BECOME BOTTOM SHEETS */
+      #base-cmd-panel, #trainee-build-panel, #trainer-panel, #advanced-build-panel {
+        left: 0; right: 0; bottom: 0;
+        transform: none;
+        width: 100%; max-width: 100%; min-width: 0;
+        border-radius: 12px 12px 0 0;
+        border-left: none; border-right: none; border-bottom: none;
+        padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+        max-height: 52vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      #base-cmd-panel, #trainee-build-panel {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      #base-cmd-panel > .cmd-btn,
+      #trainee-build-panel > .build-cmd-btn {
+        flex: 1 1 44%;
+        min-height: 52px;
+        font-size: 10px;
+      }
+      #base-panel-level, #trainee-panel-label {
+        flex: 1 1 100%; text-align: center; margin: 0 0 4px 0; font-size: 11px;
+      }
+      .train-btn { min-height: 52px; font-size: 10px; }
+
+      /* The close control is the easiest to miss and the most annoying to miss.
+         Give it a full-width row of its own at the foot of each sheet. */
+      #base-cmd-panel > .cmd-btn:last-child,
+      #trainee-build-panel > .build-cmd-btn:last-child {
+        flex: 1 1 100%; min-height: 48px; margin-top: 2px;
+      }
+
+      #commentary { bottom: calc(84px + env(safe-area-inset-bottom)); left: 6px; right: 6px; max-width: none; }
+      .cline      { font-size: 11px; padding: 6px 10px; }
+
+      #lobby      { gap: 16px; padding: 16px; }
+      #lobby-logo { width: 260px; }
+      .disc-grid  { grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%; max-width: 340px; }
+      .disc-btn   { min-height: 56px; font-size: 12px; }
+      .subtitle   { font-size: 10px; }
+      .byline     { font-size: 8px; text-align: center; }
+    }
+
+    /* PHONE PORTRAIT - the tightest case */
+    @media (max-width: 480px) {
+      #hud-clock     { font-size: 16px; }
+      #minimap       { display: none; }
+      #hud-bottom    { grid-template-columns: 54px 1fr; }
+      #unit-portrait { width: 50px; height: 50px; }
+      #economy-panel { max-width: 52vw; }
+      #base-cmd-panel > .cmd-btn,
+      #trainee-build-panel > .build-cmd-btn { flex: 1 1 100%; }
+    }
+
+    /* LANDSCAPE PHONE - height is the scarce axis, not width */
+    @media (max-height: 480px) and (orientation: landscape) {
+      #hud-top    { min-height: 40px; }
+      #hud-bottom { min-height: 62px; }
+      #base-cmd-panel, #trainee-build-panel, #trainer-panel, #advanced-build-panel {
+        max-height: 68vh;
+      }
+      #economy-panel { top: calc(46px + env(safe-area-inset-top)); }
+      #commentary    { display: none; }
+    }
+
+    /* COARSE POINTER - any touch device, regardless of size */
+    @media (pointer: coarse) {
+      .cmd-btn, .build-cmd-btn, .train-btn, .hud-btn, .disc-btn {
+        min-height: 44px;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* :hover never fires on touch, but it DOES stick after a tap and leaves
+         the button looking permanently focused. Neutralise it. */
+      .cmd-btn:hover, .build-cmd-btn:hover, .train-btn:hover, .hud-btn:hover {
+        background: inherit;
+      }
+    }
   </style>
 </head>
 <body>
@@ -177,6 +462,10 @@
     <div id="hud-left">
       <button class="hud-btn" id="btn-menu" onclick="window.openMenu()">Menu</button>
       <button class="hud-btn" id="btn-log"  onclick="window.openLog()">Log</button>
+      <!-- v0.1.17 - the permanent way into the build tree. Everything the player can
+           construct used to sit behind an unadvertised click on the base sprite. -->
+      <button class="hud-btn" id="btn-build" onclick="window.cmdOpenBasePanel()"
+        style="border-color:#f5c842;color:#f5c842;">Build</button>
     </div>
     <div id="hud-center">
       <span id="hud-clock">10:00</span>
@@ -209,9 +498,33 @@
   <div id="economy-panel">
     <div class="econ-row"><span class="econ-label">Treasury</span><span class="econ-val" id="econ-treasury">50</span></div>
     <div class="econ-row"><span class="econ-label">Base HP</span><span class="econ-val hp" id="econ-base-hp">500</span></div>
-    <div id="build-queue"><div class="build-item" style="color:#333355">No construction</div></div>
+    <div id="build-queue"><div class="build-item" style="color:#8f8fb8">No construction</div></div>
     <!-- Training queue — gold bars, hidden when empty -->
     <div id="training-queue-display"></div>
+    <!-- v0.1.14a — trainee-independent opener for #advanced-build-panel. The five
+         construction routes behind it need no trainee server-side, but their only
+         opener lived inside #trainee-build-panel, which opens solely from clicking one
+         of your own live scouts. A player with no surviving scout — exactly the player
+         who wants a Recovery Center — could not reach any of the five. It sits here,
+         not in #base-cmd-panel, for the same width reason as the Media Studio toggle
+         below. Greyed until T2, the tier that unlocks the cheapest thing inside. -->
+    <button class="cmd-btn" id="btn-open-advanced" onclick="window.cmdOpenAdvancedBuildPanelStandalone()"
+      style="width:100%;margin-top:6px;padding:5px 6px;line-height:1.5;border-color:#86efac;color:#86efac;">
+      <span id="btn-open-advanced-lbl">⚙ Advanced Build</span><br>
+      <span style="font-size:8px;color:#8888aa;">T2 / T3 structures</span>
+    </button>
+    <!-- v0.1.14 — Media Studio on/off. It converts Bling into Hype, so it lives beside
+         the resource readouts rather than in the base panel: #base-cmd-panel is
+         left:50% + translateX(-50%), which caps its usable width at half the viewport
+         (683px at 1366), and a fifth button there wrapped it into the trainee panel.
+         Hidden until the studio is BUILT — a queued one cannot be toggled.
+         Lit state comes from snapshot.players[me].mediaStudioActive, refreshed every
+         33ms by updateMediaStudioToggle(), which runs whether or not a panel is open. -->
+    <button class="cmd-btn" id="btn-toggle-media-studio" onclick="window.cmdToggleMediaStudio()"
+      style="display:none;width:100%;margin-top:6px;padding:5px 6px;line-height:1.5;">
+      <span id="btn-toggle-media-studio-lbl">Media Studio</span><br>
+      <span id="btn-toggle-media-studio-state" style="font-size:8px;color:#8888aa;">○ OFF</span>
+    </button>
   </div>
 
   <!-- BOTTOM BAR -->
@@ -236,7 +549,7 @@
         <div class="ability-slot" onclick="window.useAbility(3)"><span class="ab-key">T5</span><div class="ab-cd" id="ab-cd-3"></div></div>
       </div>
     </div>
-    <div id="hud-portraits" style="display:flex;gap:4px;align-items:center;"></div>
+    <div id="hud-portraits"></div>
     <div id="minimap">
       <canvas id="minimap-canvas"></canvas>
       <span id="minimap-label">Knuckland</span>
@@ -249,8 +562,11 @@
   <span id="base-panel-level">T1 Base</span>
   <button class="cmd-btn" id="btn-recruit-trainee" onclick="window.cmdRecruitTrainee()"
     style="border-color:#f5c842;color:#f5c842;">Recruit Trainee<br><span style="font-size:8px;color:#8888aa;">70¤ · Food</span></button>
-  <button class="cmd-btn" id="btn-upgrade-base" onclick="window.cmdUpgradeBase()"
-    style="border-color:#c084fc;color:#c084fc;">Upgrade Base<br><span style="font-size:8px;color:#8888aa;">400¤</span></button>
+  <!-- v0.1.14 — spans both upgrade steps. T1->T2 is instant (400¤, UPGRADE_BASE);
+       T2->T3 is a queued 45s job (900¤ + 300 Hype, UPGRADE_BASE_T3).
+       cmdUpgradeBaseAuto() reads baseLevel from the snapshot and picks the route. -->
+  <button class="cmd-btn" id="btn-upgrade-base" onclick="window.cmdUpgradeBaseAuto()"
+    style="border-color:#c084fc;color:#c084fc;"><span id="btn-upgrade-base-lbl">Upgrade Base</span><br><span id="btn-upgrade-base-cost" style="font-size:8px;color:#8888aa;">400¤</span></button>
   <button class="cmd-btn" id="btn-build-cookout" onclick="window.cmdBuildCookout()"
     style="border-color:#86efac;color:#86efac;">Cookout<br><span style="font-size:8px;color:#8888aa;">200¤ · T2</span></button>
   <!-- Train Fighters — hidden until Trainer is built, shown by updateBasePanel() -->
@@ -258,8 +574,10 @@
     style="display:none;border-color:#f5c842;color:#f5c842;">
     Train Fighters<br><span style="font-size:8px;color:#8888aa;">Trainer</span>
   </button>
-  <button class="cmd-btn" onclick="document.getElementById('base-cmd-panel').style.display='none';window.cmdCloseTrainerPanel();"
-    style="color:#555577;min-width:28px;">✕</button>
+  <!-- v0.1.14a — also closes #advanced-build-panel. It shares the trainer panel's
+       slot, and this X was already the gesture that clears that slot. -->
+  <button class="cmd-btn" onclick="document.getElementById('base-cmd-panel').style.display='none';window.cmdCloseTrainerPanel();window.cmdCloseAdvancedBuildPanel();"
+    style="color:#9a9ac4;min-width:28px;">✕</button>
 </div>
 
 <!-- TRAINEE BUILD PANEL -->
@@ -267,14 +585,58 @@
   <span id="trainee-panel-label">🔨 Build</span>
   <button class="build-cmd-btn" id="tbtn-tech-refinery" onclick="window.cmdBuildTechRefinery()">
     <span id="tbtn-tech-refinery-lbl">Tech Refinery (450¤)</span><br>
-    <span style="font-size:8px;color:#555577;">T2 · 30s · unlocks upgrades</span>
+    <span style="font-size:8px;color:#9a9ac4;">T2 · 30s · unlocks upgrades</span>
   </button>
   <button class="build-cmd-btn" id="tbtn-trainer" onclick="window.cmdBuildTrainer()">
     <span id="tbtn-trainer-lbl">Trainer (free, 25s)</span><br>
-    <span style="font-size:8px;color:#555577;">trains T1/T2 fighters</span>
+    <span style="font-size:8px;color:#9a9ac4;">trains T1/T2 fighters</span>
+  </button>
+  <!-- v0.1.14 — opener for the advanced structures panel. Kept out of this row so
+       five more buttons cannot wrap this panel upward into the trainer panel. -->
+  <button class="build-cmd-btn" id="tbtn-advanced" onclick="window.cmdOpenAdvancedBuildPanel()">
+    <span id="tbtn-advanced-lbl">⚙ Advanced ▸</span><br>
+    <span style="font-size:8px;color:#9a9ac4;">T2 / T3 structures</span>
   </button>
   <button class="build-cmd-btn" onclick="window.cmdCloseTraineeBuildPanel()"
-    style="color:#555577;min-width:28px;border-color:#1a1a2e;">✕</button>
+    style="color:#9a9ac4;min-width:28px;border-color:#1a1a2e;">✕</button>
+</div>
+
+<!-- ADVANCED BUILD PANEL — v0.1.14
+     The five construction routes the server has accepted since v0.1.13 but that no
+     button reached. Labels use the server's own ConstructionJob display names, which
+     is what the construction queue and the construction_complete flash both print.
+     Costs are duplicated from packages/server/src/game/state.ts:45-62 — those are
+     server-local vars, not exported through @fist/shared, so there is no importable
+     source of truth. See the COST TABLE block in main.ts. -->
+<div id="advanced-build-panel">
+  <div id="advanced-panel-header">
+    <span id="advanced-panel-label">⚙ Advanced Structures</span>
+    <button class="cmd-btn" onclick="window.cmdCloseAdvancedBuildPanel()"
+      style="color:#9a9ac4;min-width:28px;padding:3px 8px;">✕</button>
+  </div>
+  <button class="build-cmd-btn wide" id="abtn-coach" onclick="window.cmdBuildCoach()">
+    <span id="abtn-coach-lbl">Coaching Institute (350¤)</span><br>
+    <span style="font-size:8px;color:#9a9ac4;">T2 · needs Trainer · 40s · unlocks T3/T4 fighters</span>
+  </button>
+  <button class="build-cmd-btn wide" id="abtn-media-studio" onclick="window.cmdBuildMediaStudio()">
+    <span id="abtn-media-studio-lbl">Media Studio (300¤)</span><br>
+    <span style="font-size:8px;color:#9a9ac4;">T2 · 20s · toggle -10¤/sec → +3 Hype/sec</span>
+  </button>
+  <button class="build-cmd-btn wide" id="abtn-recovery-center" onclick="window.cmdBuildRecoveryCenter()">
+    <span id="abtn-recovery-center-lbl">Recovery Center (400¤ + 100⚡)</span><br>
+    <span style="font-size:8px;color:#9a9ac4;">T2 · 25s · -20% fighter training time, all tiers</span>
+  </button>
+  <button class="build-cmd-btn wide" id="abtn-championship-office" onclick="window.cmdBuildChampionshipOffice()">
+    <span id="abtn-championship-office-lbl">Championship Office (600¤ + 250⚡)</span><br>
+    <span style="font-size:8px;color:#9a9ac4;">T3 · 35s · 2x KO Hype (30) · 2x center hold (1.0/sec)</span>
+  </button>
+  <button class="build-cmd-btn wide" id="abtn-phone-booth" onclick="window.cmdBuildPhoneBooth()">
+    <span id="abtn-phone-booth-lbl">Fight Booking Office (800¤ + 300⚡)</span><br>
+    <span style="font-size:8px;color:#9a9ac4;">T3 · Trainer + Coach + Tech Refinery · 60s · unlocks T5</span>
+  </button>
+  <div id="advanced-queue-note" style="width:100%;font-size:8px;color:#8f8fb8;letter-spacing:1px;line-height:1.5;">
+    Construction runs one job at a time.
+  </div>
 </div>
 
 <!-- TRAINER PANEL — v0.1.11
@@ -284,7 +646,7 @@
   <div id="trainer-panel-header">
     <span id="trainer-panel-label">🥊 Trainer</span>
     <button class="cmd-btn" onclick="window.cmdCloseTrainerPanel()"
-      style="color:#555577;min-width:28px;padding:3px 8px;">✕</button>
+      style="color:#9a9ac4;min-width:28px;padding:3px 8px;">✕</button>
   </div>
   <button class="train-btn" id="train-t1-btn" onclick="window.cmdTrainT1Fighter()">
     <span id="train-t1-lbl">Train T1 Fighter (200¤, 12s)</span>
@@ -292,8 +654,19 @@
   <button class="train-btn" id="train-t2-btn" onclick="window.cmdTrainT2Fighter()">
     <span id="train-t2-lbl">Train T2 Fighter (350¤ + 50⚡, 20s)</span>
   </button>
+  <!-- v0.1.14 — T3/T4 gate on the Coaching Institute, T5 on the Fight Booking Office.
+       None of the three reads baseLevel server-side, so no base-tier reason is shown. -->
+  <button class="train-btn" id="train-t3-btn" onclick="window.cmdTrainT3Fighter()">
+    <span id="train-t3-lbl">Train T3 Icon (500¤ + 100⚡, 30s)</span>
+  </button>
+  <button class="train-btn" id="train-t4-btn" onclick="window.cmdTrainT4Fighter()">
+    <span id="train-t4-lbl">Train T4 Monument (800¤ + 200⚡, 45s)</span>
+  </button>
+  <button class="train-btn" id="train-t5-btn" onclick="window.cmdTrainT5Fighter()">
+    <span id="train-t5-lbl">Train T5 Paragon (1500¤ + 500⚡, 60s)</span>
+  </button>
   <div id="trainer-queue-display">
-    <span style="font-size:8px;color:#333355;letter-spacing:1px;">Queue empty</span>
+    <span style="font-size:8px;color:#8f8fb8;letter-spacing:1px;">Queue empty</span>
   </div>
 </div>
 

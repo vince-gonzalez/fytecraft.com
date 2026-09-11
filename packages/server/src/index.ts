@@ -1,6 +1,8 @@
 // BOOT ORDER: entry point — runs last, starts everything
 // READS: nothing on start
 // WRITES: starts HTTP server, opens WebSocket
+// v0.1.16 — match teardown when the last player disconnects. Without it the
+//            server served exactly ONE match per process lifetime.
 // v0.1.13 — version bump, no routing changes (all new commands handled in loop.ts enqueueCommand)
 /* ===== LAST STABLE: v0.1.11 — two-player match, socket join/command/disconnect ===== */
 
@@ -77,10 +79,30 @@ io.on('connection', function(socket: Socket) {
     console.log(`[FYTECRAFT] Client disconnected: ${socket.id}`);
     pendingPlayers.delete(socket.id);
     var loop = activeLoops.get(MATCH_ROOM);
-    if (loop) {
-      var state  = loop.getState();
-      var player = state.players[socket.id];
-      if (player) player.isConnected = false;
+    if (!loop) return;
+
+    var state  = loop.getState();
+    var player = state.players[socket.id];
+    if (player) player.isConnected = false;
+
+    // v0.1.16 - THE ONE-SHOT MATCH BUG. activeLoops was written by startMatch and
+    //   never cleared, so the join handler's `!activeLoops.has(MATCH_ROOM)` guard
+    //   was false forever after the first match. A second pair of players would
+    //   reach "(2 waiting)" and then sit in the lobby permanently - the only way
+    //   to play again was to restart the process. Reproduced live during the
+    //   v0.1.16 mobile verification: first pair started fine, both disconnected,
+    //   the next pair hit 2 waiting and the match never began.
+    // DECISION: tear the match down only when EVERY player has gone. One player
+    //   dropping mid-match must not evict the one still playing, which is why this
+    //   counts survivors instead of reacting to any disconnect at all.
+    var stillConnected = Object.keys(state.players).filter(function(pid) {
+      return state.players[pid].isConnected;
+    }).length;
+
+    if (stillConnected === 0) {
+      loop.stop();
+      activeLoops.delete(MATCH_ROOM);
+      console.log('[FYTECRAFT] All players gone - match torn down, lobby open again');
     }
   });
 });

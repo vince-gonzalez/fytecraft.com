@@ -1,6 +1,8 @@
 // BOOT ORDER: loaded before tick loop
 // READS: shared types, GAME_CONSTANTS, TIER_STATS
 // WRITES: GameState — players, entities, nodes
+// v0.1.13a — casts removed: mediaStudioActive and the four newer BuildingType literals
+//            are declared in @fist/shared now, so `as any` / `as BuildingType` are gone.
 // v0.1.13 — roster slots hard cap (50), per-tier slot costs, KO refund on death,
 //            Coaching Institute + Icon/Monument training, KO hype spike (+15),
 //            Media Studio (Bling→Hype toggle), Performance Lab +0.5 hype/tick,
@@ -158,7 +160,7 @@ export function createPlayer(id: string, discipline: Discipline, basePosition: V
     //   Stored on player object so it survives snapshots and can be toggled mid-game.
     //   Defaults false — player must opt in.
     mediaStudioActive: false,
-  } as any; // mediaStudioActive is an extension — cast until shared types updated
+  };
 }
 
 // ============================================================
@@ -366,7 +368,7 @@ export function upgradeBase(state: GameState, playerId: string): boolean {
 
     var job: ConstructionJob = {
       type:              'World Promo HQ',
-      buildingType:      'base_t3_upgrade' as BuildingType,
+      buildingType:      'base_t3_upgrade',
       costBling:         COST_UPGRADE_BASE_T3,
       timeTotal:         TIME_UPGRADE_BASE_T3_S,
       timeRemaining:     TIME_UPGRADE_BASE_T3_S,
@@ -509,7 +511,7 @@ export function buildCoach(state: GameState, playerId: string): boolean {
 //   Conversion runs in tickPassiveHype() when active.
 // ============================================================
 export function buildMediaStudio(state: GameState, playerId: string): boolean {
-  var player = state.players[playerId] as any;
+  var player = state.players[playerId];
   if (!player) return false;
   if (player.baseLevel < 2)            return false;
   if (player.bling < COST_MEDIA_STUDIO) return false;
@@ -525,7 +527,7 @@ export function buildMediaStudio(state: GameState, playerId: string): boolean {
 
   var job: ConstructionJob = {
     type:              'Media Studio',
-    buildingType:      'media_studio' as BuildingType,
+    buildingType:      'media_studio',
     costBling:         COST_MEDIA_STUDIO,
     timeTotal:         TIME_MEDIA_STUDIO_S,
     timeRemaining:     TIME_MEDIA_STUDIO_S,
@@ -544,7 +546,7 @@ export function buildMediaStudio(state: GameState, playerId: string): boolean {
 //   Client sends TOGGLE_MEDIA_STUDIO command; server flips the flag.
 // ============================================================
 export function toggleMediaStudio(state: GameState, playerId: string): boolean {
-  var player = state.players[playerId] as any;
+  var player = state.players[playerId];
   if (!player) return false;
   var has = function(t: string) { return player.buildings.some(function(b: any) { return b.type === t; }); };
   if (!has('media_studio')) return false;
@@ -569,7 +571,7 @@ export function toggleMediaStudio(state: GameState, playerId: string): boolean {
 //   so prereq tree is complete.
 // ============================================================
 export function buildRecoveryCenter(state: GameState, playerId: string): boolean {
-  var player = state.players[playerId] as any;
+  var player = state.players[playerId];
   if (!player) return false;
   if (player.baseLevel < 2)                    return false;
   if (player.bling < COST_RECOVERY_CENTER)     return false;
@@ -587,7 +589,7 @@ export function buildRecoveryCenter(state: GameState, playerId: string): boolean
 
   var job: ConstructionJob = {
     type:              'Recovery Center',
-    buildingType:      'recovery_center' as BuildingType,
+    buildingType:      'recovery_center',
     costBling:         COST_RECOVERY_CENTER,
     timeTotal:         TIME_RECOVERY_CENTER_S,
     timeRemaining:     TIME_RECOVERY_CENTER_S,
@@ -609,7 +611,7 @@ export function buildRecoveryCenter(state: GameState, playerId: string): boolean
 //   Building registers now so the unlock tree is structurally complete.
 // ============================================================
 export function buildChampionshipOffice(state: GameState, playerId: string): boolean {
-  var player = state.players[playerId] as any;
+  var player = state.players[playerId];
   if (!player) return false;
   if (player.baseLevel < 3)                        return false;
   if (player.bling < COST_CHAMPIONSHIP_OFFICE)     return false;
@@ -627,7 +629,7 @@ export function buildChampionshipOffice(state: GameState, playerId: string): boo
 
   var job: ConstructionJob = {
     type:              'Championship Office',
-    buildingType:      'championship_office' as BuildingType,
+    buildingType:      'championship_office',
     costBling:         COST_CHAMPIONSHIP_OFFICE,
     timeTotal:         TIME_CHAMPIONSHIP_OFFICE_S,
     timeRemaining:     TIME_CHAMPIONSHIP_OFFICE_S,
@@ -648,7 +650,7 @@ export function buildChampionshipOffice(state: GameState, playerId: string): boo
 //   800 Bling + 300 Hype, 60s.
 // ============================================================
 export function buildPhoneBooth(state: GameState, playerId: string): boolean {
-  var player = state.players[playerId] as any;
+  var player = state.players[playerId];
   if (!player) return false;
   var reason = getBuildBlockReason('phone_booth', player.baseLevel, player.bling, player.hype, player.buildings);
   if (reason) return false;
@@ -696,21 +698,21 @@ export function tickConstructionQueue(state: GameState, deltaS: number): void {
         player.buildings.push({ type: btype, builtAt: state.tick });
         break;
 
-      case 'base_t3_upgrade' as BuildingType:
+      case 'base_t3_upgrade':
         // DECISION: T3 upgrade completes — set baseLevel to 3.
         //   Does NOT push to player.buildings (it's a base upgrade, not a building).
         //   Hype boost on completion.
         player.baseLevel = 3;
-        (player as any).hype += 20;
+        player.hype += 20;
         break;
 
       case 'tech_refinery':
       case 'trainer':
       case 'coach':
       case 'phone_booth':
-      case 'media_studio' as BuildingType:
-      case 'recovery_center' as BuildingType:
-      case 'championship_office' as BuildingType:
+      case 'media_studio':
+      case 'recovery_center':
+      case 'championship_office':
         player.buildings.push({ type: btype, builtAt: state.tick });
         break;
 
@@ -745,7 +747,7 @@ export function tickConstructionQueue(state: GameState, deltaS: number): void {
 // ============================================================
 export function tickPassiveHype(state: GameState, deltaS: number): void {
   Object.values(state.players).forEach(function(player) {
-    var p = player as any;
+    var p = player;
 
     var baseHypeTick = 0;
     if (player.baseLevel >= 3)      baseHypeTick = HYPE_PER_TICK_T3_BASE;
@@ -789,7 +791,7 @@ export function tickPassiveHype(state: GameState, deltaS: number): void {
 //   killedTier passed in for future scaling (e.g. bonus for KO'ing Paragon).
 // ============================================================
 export function applyKoHypeSpike(state: GameState, killerPlayerId: string, killedTier: number): void {
-  var killer = state.players[killerPlayerId] as any;
+  var killer = state.players[killerPlayerId];
   if (!killer) return;
 
   var spike = HYPE_KO_SPIKE;
@@ -823,7 +825,7 @@ export function applyKoHypeSpike(state: GameState, killerPlayerId: string, kille
 //   T5 wired via Fight Booking Office.
 // ============================================================
 export function trainFighter(state: GameState, playerId: string, tier: 1|2|3|4|5): boolean {
-  var player = state.players[playerId] as any;
+  var player = state.players[playerId];
   if (!player) return false;
 
   var has = function(t: string) {

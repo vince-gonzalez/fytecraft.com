@@ -1,6 +1,20 @@
 // BOOT ORDER: loaded by main.ts
 // READS: snapshot data
 // WRITES: DOM elements (HUD, portraits, commentary)
+//
+// ============================================================
+// CHANGE LOG - v0.1.14a
+// ============================================================
+// FIXED - updatePortraits wrote innerHTML to #hud-bottom, the whole bottom HUD
+//         CONTAINER, instead of #hud-portraits, the empty strip inside it. Every UI
+//         tick (33ms) that assignment deleted #unit-portrait, #unit-hp-bar,
+//         #unit-hp-fill, #unit-sprite, #unit-portrait-name, #cmd-bar, the six
+//         #cmd-* buttons, #ability-bar, #ab-cd-1..3, #minimap, #minimap-canvas and
+//         #minimap-label from the DOM. It fired even before the first fighter spawned,
+//         because with no live units the value assigned is ''. GameRenderer had already
+//         captured #minimap-canvas in its constructor, so the minimap draw loop then ran
+//         forever into a detached canvas - blank minimap, no throw, no console error.
+// ============================================================
 
 // ── DISCIPLINE COLORS ─────────────────────────────────────
 export var DISC_COLORS: Record<string, string> = {
@@ -59,7 +73,8 @@ export function updatePortraits(
   myDiscipline: string,
   onPortraitClick: (id: string) => void
 ): void {
-  var bar = document.getElementById('hud-bottom');
+  // v0.1.14a - #hud-portraits, NOT #hud-bottom. See the CHANGE LOG at the top.
+  var bar = document.getElementById('hud-portraits');
   if (!bar) return;
 
   var color = DISC_COLORS[myDiscipline] ?? '#00e5ff';
@@ -193,7 +208,7 @@ export function updateEconomyPanel(snapshot: any, myPlayerId: string): void {
   if (qEl && player.constructionQueue) {
     qEl.innerHTML = '';
     if (player.constructionQueue.length === 0) {
-      qEl.innerHTML = '<div class="build-item" style="color:#444466">No construction</div>';
+      qEl.innerHTML = '<div class="build-item" style="color:#9595bd">No construction</div>';
     } else {
       player.constructionQueue.forEach(function(job: any) {
         var pct  = Math.round((1 - job.timeRemaining / job.timeTotal) * 100);

@@ -1,6 +1,7 @@
 // BOOT ORDER: entry point for simulation
 // READS: GameState, GAME_CONSTANTS, all engine packages
 // WRITES: GameState each tick via tick()
+// v0.1.13a — snapshot no longer casts p to any for mediaStudioActive.
 // v0.1.13 — tickPassiveHype() replaces inline hype tick,
 //            food sync replaced by roster slot live recount (in state.ts),
 //            new command routes: BUILD_COACH, BUILD_MEDIA_STUDIO,
@@ -173,12 +174,12 @@ function tickCenterHoldHype(state: GameState, deltaS: number): void {
   var rate = HYPE_CENTER_PER_SEC;
 
   // Championship Office doubles center hold hype
-  var hasChampOffice = (holder as any).buildings && (holder as any).buildings.some(function(b: any) {
+  var hasChampOffice = holder.buildings && holder.buildings.some(function(b) {
     return b.type === 'championship_office';
   });
   if (hasChampOffice) rate *= 2.0;
 
-  (holder as any).hype = Math.min(99999, ((holder as any).hype || 0) + rate * deltaS);
+  holder.hype = Math.min(99999, (holder.hype || 0) + rate * deltaS);
 }
 
 export class GameLoop {
@@ -222,7 +223,7 @@ export class GameLoop {
   // READS: command.metaType — routes to state functions immediately
   // WRITES: state via state functions, commandQueues for unit commands
   enqueueCommand(command: Command): void {
-    var meta = (command as any).metaType;
+    var meta = command.metaType;
 
     // ── Economy / base commands ──────────────────────────────
     if (meta === 'RECRUIT_TRAINEE')          { this.handleRecruitTrainee(command.unitId);              return; }
@@ -463,7 +464,7 @@ export class GameLoop {
         trainingQueue:     p.trainingQueue      ?? [],
         // DECISION: mediaStudioActive sent in snapshot so client can
         //   show toggle state in UI without a separate request.
-        mediaStudioActive: (p as any).mediaStudioActive ?? false,
+        mediaStudioActive: p.mediaStudioActive ?? false,
       };
     });
 

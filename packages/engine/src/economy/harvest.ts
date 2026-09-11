@@ -1,6 +1,7 @@
 // BOOT ORDER: loaded by server tick loop alongside combat
 // READS: entity.isHarvesting, entity.harvestTarget, player.bling
 // WRITES: entity.isHarvesting, player.bling, node.currentHolderId
+// v0.1.13a — duplicate tickConfidenceDecay removed; resolver.ts owns it
 
 import {
   Entity,
@@ -243,12 +244,11 @@ export function spendBling(
 }
 
 // ============================================================
-// CONFIDENCE PASSIVE DECAY
+// CONFIDENCE PASSIVE DECAY — REMOVED v0.1.13a
+// DECISION: this was a byte-identical duplicate of the same function in
+//   combat/resolver.ts. Both were re-exported through engine/src/index.ts via
+//   `export *`, which made the barrel ambiguous (TS2308) and broke the engine and
+//   client builds. Confidence is a combat concern and resolver.ts already carried the
+//   note "exported for loop.ts", so resolver.ts keeps it and this copy is gone.
+//   loop.ts's import is unchanged — it resolves through the barrel either way.
 // ============================================================
-
-export function tickConfidenceDecay(entity: Entity): void {
-  entity.confidence = Math.max(
-    0,
-    entity.confidence - GAME_CONSTANTS.CONFIDENCE_PASSIVE_DECAY
-  );
-}

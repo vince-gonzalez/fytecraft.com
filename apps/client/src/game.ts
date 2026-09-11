@@ -1,4 +1,6 @@
 // BOOT ORDER: loaded by main.ts
+// v0.1.14a — base sprite draw made fallback-safe, and DISC_HOME.Grappler repointed
+//            at a sprite that exists on disk. See CHANGE LOG below.
 // v0.1.12 — projection recalibrated for 1536x1024 semi-iso map,
 //            3x unit scale, larger nodes/structures, flat map billboard render
 /* ===== LAST STABLE: v0.1.11 — two-player browser match, Bling economy, trainer panel ===== */
@@ -21,11 +23,30 @@
    Map:          map.png (1536x1024, semi-iso octagon arena)
    Nodes:        safeNode.png, hotNode.png, centerRing.png
    Buildings T1: scrapYard.png
-   Buildings T2: localGym.png, theMats.png, biggerYard.png, theAcademy.png, theLaboratory.png
+   Buildings T2: localGym.png, wrestlingClub.png, biggerYard.png, theAcademy.png, theLaboratory.png
    Economy:      cookout.png, techRefinery.png
    Barracks:     trainer.png, coach.png, phoneBooth.png
    Misc:         logo.png
 ===== END MANIFEST ===== */
+
+/* ============================================================
+   CHANGE LOG — v0.1.14a
+   ============================================================
+   FIXED  ASSETS.theMats loaded '/assets/theMats.png', which is not in
+          public/assets and never has been. DISC_HOME maps Grappler -> 'theMats',
+          so a Grappler base drew nothing at all from the moment the T1->T2 upgrade
+          landed: the pulsing ring, the YOUR BASE / ENEMY BASE label, the HP bar and
+          the tier badge floated over a 140x140 hole. It now loads wrestlingClub.png,
+          the Grappler house sprite that is on disk.
+   FIXED  drawBases called drawCentered for the base sprite as a bare statement and
+          threw away the boolean it returns. The fighter draw already consumes it and
+          falls back to a vector shape; the base draw now falls back to scrapYard.png,
+          so any future discipline with missing art degrades to the T1 shack rather
+          than to an empty patch of map.
+   KNOWN  media_studio, recovery_center and championship_office have no ASSETS entry
+          and no drawBases branch, so those three buildings do not render on the map
+          even though v0.1.14 sells them. That needs art, not a code change.
+   ============================================================ */
 
 import { Interpolator, RenderEntity } from './interpolation';
 import { InputHandler } from './input';
@@ -63,6 +84,64 @@ var BASE_SPRITE_SIZE = 140;
 
 // DECISION: Scroll speed tuned for TILE_H=32 (was 12 at TILE_H=24).
 var CAM_SCROLL_SPD = 14;
+
+// ── CAMERA ZOOM — v0.1.16 ─────────────────────────────────────
+// DECISION: zoom is applied as a CANVAS TRANSFORM (ctx.scale) rather than by
+//   multiplying TILE_W/TILE_H or the ~15 sprite-size constants. Baking it into
+//   worldToScreen would have zoomed the ground plane while leaving every sprite,
+//   node ring and HP bar at a fixed pixel size - the map would slide out from
+//   under the units. One transform scales the whole scene coherently and no
+//   draw call had to change.
+// DECISION: because of that, camX/camY live in PRE-SCALE space. Every hit test
+//   therefore divides the incoming screen coordinate by ZOOM before comparing
+//   (see getUnitAt / getBaseAt / getUnitsInBox), and a pan of N screen pixels
+//   moves the camera by N/ZOOM.
+// DECISION: floor 0.45 keeps the whole arena diamond on a phone screen; ceiling
+//   2.2 is where map.png's 6.25x upscale becomes indefensible.
+var ZOOM     = 1;
+var ZOOM_MIN = 0.45;
+var ZOOM_MAX = 2.2;
+
+export function getZoom(): number { return ZOOM; }
+
+// ── MAP REGISTRATION — v0.1.18 ────────────────────────────────
+// DECISION: the renderer used to assume the painted arena diamond touched the
+//   image's edge midpoints exactly - world(0,0) at top-centre, world(100,0) at
+//   right-centre, and so on. No image generator hits that, and any map drawn as
+//   a real 3D camera shot puts the cage INSET inside the frame with a vanishing
+//   point. Fighting that in the prompt is a losing battle, so the engine is now
+//   calibratable instead: describe where the painted diamond actually sits and
+//   the map is scaled and offset so the world diamond lands on it.
+//
+// The four numbers, all fractions of the source image (0-1):
+//   MAP_DIAMOND_CX / CY       centre of the painted arena floor
+//   MAP_DIAMOND_HALF_W / _H   half-width / half-height of that diamond
+//
+// 0.5 / 0.5 / 0.5 / 0.5 reproduces the old edge-midpoint behaviour exactly, so
+// a map drawn to the original spec still works untouched.
+//
+// CALIBRATE IT LIVE: with the game running, open the console and call
+//   __mapCal(cx, cy, halfW, halfH)      e.g. __mapCal(0.511, 0.540, 0.397, 0.349)
+//   __mapCalShow(true)                  draws the world diamond over the art
+// Nudge until the drawn outline sits on the painted cage floor, then read the
+// numbers back with __mapCal() and bake them in here.
+var MAP_DIAMOND_CX     = 0.5;
+var MAP_DIAMOND_CY     = 0.5;
+var MAP_DIAMOND_HALF_W = 0.5;
+var MAP_DIAMOND_HALF_H = 0.5;
+var MAP_CAL_OVERLAY    = false;
+
+(window as any).__mapCal = function(cx?: number, cy?: number, hw?: number, hh?: number) {
+  if (typeof cx === 'number') MAP_DIAMOND_CX     = cx;
+  if (typeof cy === 'number') MAP_DIAMOND_CY     = cy;
+  if (typeof hw === 'number') MAP_DIAMOND_HALF_W = hw;
+  if (typeof hh === 'number') MAP_DIAMOND_HALF_H = hh;
+  return 'MAP_DIAMOND_CX = ' + MAP_DIAMOND_CX +
+       '; MAP_DIAMOND_CY = ' + MAP_DIAMOND_CY +
+       '; MAP_DIAMOND_HALF_W = ' + MAP_DIAMOND_HALF_W +
+       '; MAP_DIAMOND_HALF_H = ' + MAP_DIAMOND_HALF_H + ';';
+};
+(window as any).__mapCalShow = function(on: boolean) { MAP_CAL_OVERLAY = !!on; return MAP_CAL_OVERLAY; };
 // ── END CONFIG ────────────────────────────────────────────────
 
 function loadImg(src: string): { img: HTMLImageElement; loaded: boolean } {
@@ -115,7 +194,11 @@ var ASSETS: Record<string, { img: HTMLImageElement; loaded: boolean }> = {
   coach:          loadImg('/assets/coach.png'),
   phoneBooth:     loadImg('/assets/phoneBooth.png'),
   localGym:       loadImg('/assets/localGym.png'),
-  theMats:        loadImg('/assets/theMats.png'),
+  // v0.1.14a - the 'theMats' KEY is what DISC_HOME.Grappler resolves to, but
+  // theMats.png has never existed in public/assets. The load 404'd, loaded stayed
+  // false, and every Grappler base vanished from the map the moment it reached T2.
+  // wrestlingClub.png is the Grappler house sprite that is actually on disk.
+  theMats:        loadImg('/assets/wrestlingClub.png'),
   biggerYard:     loadImg('/assets/biggerYard.png'),
   theAcademy:     loadImg('/assets/theAcademy.png'),
   theLaboratory:  loadImg('/assets/theLaboratory.png'),
@@ -161,6 +244,42 @@ function rgba(hex: string, a: number): string {
   var g = parseInt(hex.slice(3,5), 16);
   var b = parseInt(hex.slice(5,7), 16);
   return 'rgba(' + r + ',' + g + ',' + b + ',' + a.toFixed(2) + ')';
+}
+
+// ── LEGIBLE CANVAS TEXT — v0.1.15 ─────────────────────────────
+// DECISION: every text draw in this renderer now goes through outlinedText().
+//   Before this there were 5 fillText calls and 0 strokeText, so a label's
+//   legibility depended entirely on what happened to be behind it — the gold
+//   treasury readout over a gold cage floor was invisible. One site used
+//   shadowBlur as a glow in the label's OWN colour, which spreads that colour
+//   outward and does the opposite of separating a glyph from its background.
+// DECISION: the outline is stroked BEFORE the fill, with lineJoin 'round' so
+//   thin monospace stems do not grow spikes at the joins, and miterLimit 2 as
+//   a second guard. Stroke width scales off the font size rather than sitting
+//   at a fixed 3px, because this helper serves 9px badges and 11px labels.
+// DECISION: OUTLINE_INK is near-black at 0.85, not pure #000 — a full-black
+//   ring reads as a sticker cutout against the dark arena floor.
+var OUTLINE_INK = 'rgba(4,4,8,0.85)';
+
+function outlinedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number, y: number,
+  fill: string,
+  fontPx: number,
+  bold: boolean
+): void {
+  ctx.save();
+  ctx.font        = (bold ? 'bold ' : '') + fontPx + 'px "Share Tech Mono","Courier New",monospace';
+  ctx.textAlign   = 'center';
+  ctx.lineJoin    = 'round';
+  ctx.miterLimit  = 2;
+  ctx.lineWidth   = Math.max(2, Math.round(fontPx / 3));
+  ctx.strokeStyle = OUTLINE_INK;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle   = fill;
+  ctx.fillText(text, x, y);
+  ctx.restore();
 }
 
 function drawCentered(
@@ -228,17 +347,19 @@ function drawBases(
     ctx.restore();
 
     // Label
-    ctx.save();
-    ctx.fillStyle  = color;
-    ctx.font       = 'bold 11px "Share Tech Mono","Courier New",monospace';
-    ctx.textAlign  = 'center';
-    ctx.shadowColor = color;
-    ctx.shadowBlur  = 8;
-    ctx.fillText(pid === myId ? 'YOUR BASE' : 'ENEMY BASE', sc.x, sc.y - (BASE_SPRITE_SIZE * 0.6));
-    ctx.restore();
+    // v0.1.15 - was fillStyle + shadowBlur 8 in the label's own colour, which
+    //   bloomed the glyph outward instead of separating it from the art behind.
+    outlinedText(ctx, pid === myId ? 'YOUR BASE' : 'ENEMY BASE',
+                 sc.x, sc.y - (BASE_SPRITE_SIZE * 0.6), color, 11, true);
 
     // Base building sprite — BASE_SPRITE_SIZE
-    drawCentered(ctx, sprKey, sc.x, sc.y, BASE_SPRITE_SIZE, BASE_SPRITE_SIZE);
+    // v0.1.14a - consume the boolean, the same idiom the fighter draw already uses.
+    // A discipline sprite that fails to load used to leave a 140x140 hole with the
+    // ring, the label and the HP bar floating over empty map. scrapYard.png is always
+    // present, so a missing house degrades to the T1 shack instead of to nothing.
+    if (!drawCentered(ctx, sprKey, sc.x, sc.y, BASE_SPRITE_SIZE, BASE_SPRITE_SIZE)) {
+      drawCentered(ctx, 'scrapYard', sc.x, sc.y, BASE_SPRITE_SIZE, BASE_SPRITE_SIZE);
+    }
 
     // Secondary buildings — offsets scaled with BASE_SPRITE_SIZE
     // DECISION: offsets proportionally larger than v0.1.11 to match bigger base sprite.
@@ -277,21 +398,24 @@ function drawBases(
     ctx.fillRect(bx, by, bw * hpPct, bh);
 
     // Treasury
-    ctx.fillStyle = '#f5c842';
-    ctx.font      = '9px "Share Tech Mono","Courier New",monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('\u00a4' + Math.floor(player.baseTreasury || 0), sc.x, by + bh + 11);
+    outlinedText(ctx, '¤' + Math.floor(player.baseTreasury || 0),
+                 sc.x, by + bh + 11, '#f5c842', 9, false);
 
     // Level badge
-    ctx.fillStyle = level >= 2 ? '#f5c842' : '#8888aa';
-    ctx.font      = 'bold 9px "Share Tech Mono","Courier New",monospace';
-    ctx.fillText('T' + level, sc.x + (BASE_SPRITE_SIZE * 0.4), sc.y - (BASE_SPRITE_SIZE * 0.6));
+    outlinedText(ctx, 'T' + level,
+                 sc.x + (BASE_SPRITE_SIZE * 0.4), sc.y - (BASE_SPRITE_SIZE * 0.6),
+                 level >= 2 ? '#f5c842' : '#8888aa', 9, true);
   });
 }
 
 export class GameRenderer {
   private canvas:         HTMLCanvasElement;
   private ctx:            CanvasRenderingContext2D;
+  // v0.1.15 - DPR state. canvas.width is the BACKING STORE in device pixels;
+  //   viewW/viewH are CSS pixels and are what every draw coordinate speaks in.
+  private dpr:            number = 1;
+  private viewW:          number = 0;
+  private viewH:          number = 0;
   private mmCanvas:       HTMLCanvasElement | null = null;
   private mmCtx:          CanvasRenderingContext2D | null = null;
   private interpolator:   Interpolator;
@@ -314,11 +438,15 @@ export class GameRenderer {
     this.myDiscipline = myDiscipline;
 
     this.canvas = document.createElement('canvas');
-    this.canvas.width  = window.innerWidth;
-    this.canvas.height = window.innerHeight;
-    this.canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2;';
+    // v0.1.16 - touch-action:none hands pan/pinch to the game instead of the browser.
+    //   Taps still synthesise a click, so the existing mouse select path is untouched.
+    this.canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2;touch-action:none;';
     container.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
+    // v0.1.15 - the backing store was sized in CSS pixels, so on every phone
+    //   (DPR 2-3) and every HiDPI laptop the whole game was upscaled by the
+    //   compositor. Sprites, the 9px labels and the HP bars all resolved soft.
+    this.syncCanvasSize();
 
     // DECISION: Camera default recalibrated for TILE_H=32.
     //   worldToScreen(50,50) = screenX=0+camX, screenY=100*32+camY = 3200+camY.
@@ -332,9 +460,11 @@ export class GameRenderer {
     var mm = document.getElementById('minimap-canvas') as HTMLCanvasElement;
     if (mm) { this.mmCanvas = mm; this.mmCtx = mm.getContext('2d'); }
 
-    window.addEventListener('resize', () => {
-      this.canvas.width  = window.innerWidth;
-      this.canvas.height = window.innerHeight;
+    window.addEventListener('resize', () => { this.syncCanvasSize(); });
+    // v0.1.15 - a phone rotation fires orientationchange before the new
+    //   innerWidth has settled in some mobile browsers, so re-sync on both.
+    window.addEventListener('orientationchange', () => {
+      window.setTimeout(() => { this.syncCanvasSize(); }, 120);
     });
 
     this.input = new InputHandler(
@@ -342,7 +472,19 @@ export class GameRenderer {
       (cmd)        => { (window as any).__sendCommand?.(cmd); },
       (x, y)       => this.getUnitAt(x, y),
       (x1,y1,x2,y2) => this.getUnitsInBox(x1,y1,x2,y2),
-      (x, y)       => screenToWorld(x, y, this.camX, this.camY)
+      (x, y)       => screenToWorld(x / ZOOM, y / ZOOM, this.camX, this.camY),
+      // v0.1.16 - touch pan: N screen pixels is N/ZOOM camera pixels.
+      (dx, dy)     => { this.camX += dx / ZOOM; this.camY += dy / ZOOM; },
+      // v0.1.16 - pinch zoom, anchored so the world point under the pinch
+      //   midpoint stays put. cam' = cam + S * (1/Z' - 1/Z).
+      (factor, ax, ay) => {
+        var prev = ZOOM;
+        var next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, prev * factor));
+        if (next === prev) return;
+        ZOOM = next;
+        this.camX += ax * (1 / next - 1 / prev);
+        this.camY += ay * (1 / next - 1 / prev);
+      }
     );
 
     // Left-click: base > trainee > deselect
@@ -375,10 +517,10 @@ export class GameRenderer {
 
     var dragging = false, dragX = 0, dragY = 0;
     this.canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 1) { dragging = true; dragX = e.clientX - this.camX; dragY = e.clientY - this.camY; }
+      if (e.button === 1) { dragging = true; dragX = e.clientX / ZOOM - this.camX; dragY = e.clientY / ZOOM - this.camY; }
     });
     this.canvas.addEventListener('mousemove', (e) => {
-      if (dragging) { this.camX = e.clientX - dragX; this.camY = e.clientY - dragY; }
+      if (dragging) { this.camX = e.clientX / ZOOM - dragX; this.camY = e.clientY / ZOOM - dragY; }
     });
     this.canvas.addEventListener('mouseup', (e) => {
       if (e.button === 1) dragging = false;
@@ -393,10 +535,10 @@ export class GameRenderer {
     var last = performance.now();
     var tick = (now: number) => {
       var delta = now - last; last = now;
-      if (this.keys['w'] || this.keys['ArrowUp'])    this.camY += CAM_SCROLL_SPD;
-      if (this.keys['s'] || this.keys['ArrowDown'])  this.camY -= CAM_SCROLL_SPD;
-      if (this.keys['a'] || this.keys['ArrowLeft'])  this.camX += CAM_SCROLL_SPD;
-      if (this.keys['d'] || this.keys['ArrowRight']) this.camX -= CAM_SCROLL_SPD;
+      if (this.keys['w'] || this.keys['ArrowUp'])    this.camY += CAM_SCROLL_SPD / ZOOM;
+      if (this.keys['s'] || this.keys['ArrowDown'])  this.camY -= CAM_SCROLL_SPD / ZOOM;
+      if (this.keys['a'] || this.keys['ArrowLeft'])  this.camX += CAM_SCROLL_SPD / ZOOM;
+      if (this.keys['d'] || this.keys['ArrowRight']) this.camX -= CAM_SCROLL_SPD / ZOOM;
       if (this.shakeFrames > 0) { this.shakeFrames--; this.shakeX *= 0.8; this.shakeY *= 0.8; }
       else { this.shakeX = 0; this.shakeY = 0; }
       if (this.hitstopFrames > 0) { this.hitstopFrames--; this.raf = requestAnimationFrame(tick); return; }
@@ -412,13 +554,21 @@ export class GameRenderer {
     var ctx = this.ctx;
     var cx  = this.camX + this.shakeX;
     var cy  = this.camY + this.shakeY;
-    var W   = this.canvas.width;
-    var H   = this.canvas.height;
+    // v0.1.15 - CSS pixels. canvas.width is now the device-pixel backing store
+    //   and would double every clear and fill under the DPR transform.
+    var W   = this.viewW;
+    var H   = this.viewH;
 
     ctx.clearRect(0, 0, W, H);
     // DECISION: Background fill matches the arena perimeter/crowd dark tone.
     ctx.fillStyle = '#0d0d0d';
     ctx.fillRect(0, 0, W, H);
+
+    // v0.1.16 - everything below this point draws in PRE-ZOOM space. The clear
+    //   and the background fill above deliberately sit outside it, so they always
+    //   cover the real viewport no matter how far out the player has pinched.
+    ctx.save();
+    ctx.scale(ZOOM, ZOOM);
 
     // ── MAP — flat billboard scaled to world bounding box ────
     // DECISION: Map is drawn as a simple scaled rectangle aligned to the
@@ -435,7 +585,44 @@ export class GameRenderer {
       var minY = Math.min(tl.y, tr.y, bl.y, br.y);
       var maxX = Math.max(tl.x, tr.x, bl.x, br.x);
       var maxY = Math.max(tl.y, tr.y, bl.y, br.y);
-      ctx.drawImage(mapImg, minX, minY, maxX - minX, maxY - minY);
+
+      // v0.1.18 - scale the image so its PAINTED diamond covers the world
+      //   diamond, instead of assuming the painted diamond is the whole frame.
+      //   If the art's arena spans 79% of the image width, the image is drawn
+      //   1/0.79 times wider than the world box so the arena itself lines up.
+      var worldW = maxX - minX;
+      var worldH = maxY - minY;
+      var drawW  = worldW / (2 * MAP_DIAMOND_HALF_W);
+      var drawH  = worldH / (2 * MAP_DIAMOND_HALF_H);
+      var drawX  = (minX + worldW / 2) - MAP_DIAMOND_CX * drawW;
+      var drawY  = (minY + worldH / 2) - MAP_DIAMOND_CY * drawH;
+      ctx.drawImage(mapImg, drawX, drawY, drawW, drawH);
+
+      // Calibration overlay - the true world diamond and the four safe-node
+      // anchors, so the art can be dialled in against real geometry, by eye,
+      // once, instead of by re-rolling prompts.
+      if (MAP_CAL_OVERLAY) {
+        ctx.save();
+        ctx.strokeStyle = '#00e5ff';
+        ctx.lineWidth   = 3;
+        ctx.setLineDash([12, 8]);
+        ctx.beginPath();
+        ctx.moveTo(tl.x, tl.y);
+        ctx.lineTo(tr.x, tr.y);
+        ctx.lineTo(br.x, br.y);
+        ctx.lineTo(bl.x, bl.y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#ff3b3b';
+        [[20,20],[80,20],[80,80],[20,80],[50,50]].forEach(function(n) {
+          var q = worldToScreen(n[0], n[1], cx, cy);
+          ctx.beginPath();
+          ctx.arc(q.x, q.y, 9, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.restore();
+      }
     }
 
     // ── NODES ────────────────────────────────────────────────
@@ -467,14 +654,10 @@ export class GameRenderer {
 
       ctx.save();
       ctx.globalAlpha = 0.9;
-      ctx.fillStyle   = node.center ? '#00e5ff' : node.hot ? '#f5c842' : '#8888aa';
-      ctx.font        = 'bold 9px "Share Tech Mono","Courier New",monospace';
-      ctx.textAlign   = 'center';
-      ctx.fillText(
+      outlinedText(ctx,
         node.center ? 'CENTER' : node.hot ? 'HOT' : 'SAFE',
-        p.x,
-        p.y - (size / 2) - 6
-      );
+        p.x, p.y - (size / 2) - 6,
+        node.center ? '#00e5ff' : node.hot ? '#f5c842' : '#8888aa', 9, true);
       ctx.restore();
     });
 
@@ -490,6 +673,11 @@ export class GameRenderer {
       if (!e.isAlive) return;
       this.drawUnit(ctx, e, cx, cy);
     });
+
+    // v0.1.16 - close the zoom transform HERE. Everything above is world space
+    //   and scales with the pinch; the box-select rectangle below is a screen-space
+    //   overlay built from raw pointer coordinates and must not be scaled twice.
+    ctx.restore();
 
     // ── BOX SELECT ───────────────────────────────────────────
     var b = this.input.boxSelect;
@@ -597,20 +785,40 @@ export class GameRenderer {
       ctx.fillRect(p.x - barW / 2, barY, barW * hpPct, barH);
 
       // Career letter
-      ctx.fillStyle = color;
-      ctx.font      = 'bold 10px "Share Tech Mono","Courier New",monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(CAREER_LETTER[e.careerState] ?? '?', p.x, barY - 4);
+      outlinedText(ctx, CAREER_LETTER[e.careerState] ?? '?', p.x, barY - 4, color, 10, true);
     }
 
     ctx.restore();
   }
 
+  // ── CANVAS SIZING — v0.1.15 ─────────────────────────────────
+  // DECISION: backing store = CSS size x devicePixelRatio, then the context is
+  //   scaled by the same factor, so every existing draw call keeps speaking in
+  //   CSS pixels and no call site had to change. Assigning canvas.width resets
+  //   all context state, so setTransform must follow it every time - that is
+  //   why this lives in one method instead of being inlined at both call sites.
+  // DECISION: dpr is capped at 3. Some Android devices report 3.5-4, which at
+  //   a 2400px-wide viewport is a 9600px backing store - the fill rate collapses
+  //   for detail no screen can resolve.
+  private syncCanvasSize(): void {
+    this.dpr   = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    this.viewW = window.innerWidth;
+    this.viewH = window.innerHeight;
+    this.canvas.width  = Math.round(this.viewW * this.dpr);
+    this.canvas.height = Math.round(this.viewH * this.dpr);
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  }
+
   private drawMinimap(): void {
     if (!this.mmCtx || !this.mmCanvas) return;
     var mc  = this.mmCtx;
-    var mmW = this.mmCanvas.width  = this.mmCanvas.offsetWidth  || 110;
-    var mmH = this.mmCanvas.height = this.mmCanvas.offsetHeight || 70;
+    // v0.1.15 - the minimap backing store tracked CSS size but not DPR, so the
+    //   node and unit dots were resampled up and smeared on any HiDPI screen.
+    var mmW = this.mmCanvas.offsetWidth  || 110;
+    var mmH = this.mmCanvas.offsetHeight || 70;
+    this.mmCanvas.width  = Math.round(mmW * this.dpr);
+    this.mmCanvas.height = Math.round(mmH * this.dpr);
+    mc.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     mc.clearRect(0, 0, mmW, mmH);
     mc.fillStyle = '#0a0a14';
     mc.fillRect(0, 0, mmW, mmH);
@@ -646,8 +854,12 @@ export class GameRenderer {
 
   // Returns playerId of base clicked, or null
   // DECISION: hit radius scales with BASE_SPRITE_SIZE
-  private getBaseAt(sx: number, sy: number): string | null {
+  // v0.1.16 - sx/sy arrive as raw screen pixels but worldToScreen returns pre-zoom
+  //   coordinates, so every hit test divides by ZOOM first. Without this, pinching
+  //   out makes every unit and base unclickable except near the top-left corner.
+  private getBaseAt(sxRaw: number, syRaw: number): string | null {
     if (!this.latestSnapshot?.players) return null;
+    var sx = sxRaw / ZOOM, sy = syRaw / ZOOM;
     var found: string | null = null;
     Object.keys(this.latestSnapshot.players).forEach((pid) => {
       var bp = this.latestSnapshot.players[pid].basePosition;
@@ -659,7 +871,8 @@ export class GameRenderer {
     return found;
   }
 
-  private getUnitAt(sx: number, sy: number): string | null {
+  private getUnitAt(sxRaw: number, syRaw: number): string | null {
+    var sx = sxRaw / ZOOM, sy = syRaw / ZOOM;
     for (var e of this.interpolator.getEntities()) {
       if (!e.isAlive) continue;
       var p  = worldToScreen(e.rx, e.ry, this.camX, this.camY);
@@ -669,7 +882,8 @@ export class GameRenderer {
     return null;
   }
 
-  private getUnitsInBox(x1: number, y1: number, x2: number, y2: number): string[] {
+  private getUnitsInBox(x1Raw: number, y1Raw: number, x2Raw: number, y2Raw: number): string[] {
+    var x1 = x1Raw / ZOOM, y1 = y1Raw / ZOOM, x2 = x2Raw / ZOOM, y2 = y2Raw / ZOOM;
     return this.interpolator.getEntities().filter((e) => {
       if (!e.isAlive) return false;
       var p = worldToScreen(e.rx, e.ry, this.camX, this.camY);
